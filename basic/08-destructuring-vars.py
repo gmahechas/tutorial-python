@@ -13,3 +13,6 @@ l2 = [1, 2, 3, 4, 5]
 *rest2, last = l
 print(rest2)
 print(last)
+
+
+player_name, total_score, initial_socre = 'Guss', 100, 0
