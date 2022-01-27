@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, jsonify
 
 country_blueprint = Blueprint('country', __name__, url_prefix='/country')
 
@@ -16,7 +16,11 @@ def delete_one():
 
 @country_blueprint.route('/search/one', methods=['GET'])
 def search_one():
-    return 'search/one'
+    arr = [
+        { "username": "tavogus", "theme": "dark", "image": "image_url" },
+        dict(username="avanegas", theme="light", image="image_url")
+    ]
+    return jsonify(arr)
 
 @country_blueprint.route('/search/many', methods=['GET'])
 def search_many():
