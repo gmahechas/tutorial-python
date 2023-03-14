@@ -1,0 +1,4 @@
+Hi Guys
+This is a python tutorial
+we are working on comprehensions here
+list comprehensions is our current topic
