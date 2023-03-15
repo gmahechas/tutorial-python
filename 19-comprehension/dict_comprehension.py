@@ -19,3 +19,11 @@ print(new_dict_keys)
 
 dict2 = {i: i ** 2 for i in range(10) if i % 2 == 0}
 print(dict2)
+
+# using lambda function
+feh = {'temp1': 10, 'temp2': 20, 'temp3': 30, 'temp4': 40}
+the_func = lambda fa_temp: (float(5) / 9) * (fa_temp - 32)
+the_map = list(map(the_func, feh.values()))
+the_dict = dict(zip(feh.keys(), the_map))
+
+print(the_dict)
