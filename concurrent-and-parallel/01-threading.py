@@ -42,7 +42,7 @@ def main():
         # t.join()  # execution next block until it finish
         current_threads.append(t)
 
-    for thread in range(len(current_threads) - 2):
+    for thread in range(len(current_threads)):
         current_threads[thread].join()
 
     print(f'sleep took: {round(time.time() - sleep_start_time, 1)}')
