@@ -1,0 +1,6 @@
+this is the first line
+this is the second
+line like this
+30
+50.6
+"This is a text within a text"
