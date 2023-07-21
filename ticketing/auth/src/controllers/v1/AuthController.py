@@ -1,7 +1,7 @@
 class AuthController:
 
     def __init__(self):
-        print("AuthController initialized")
+        pass
 
     def signup(self) -> str:
         return "signup"
