@@ -1,9 +1,12 @@
+from controllers.v1.UserSignUpDTO import UserSignUpDTO
+
+
 class AuthController:
 
     def __init__(self):
         pass
 
-    def signup(self) -> str:
+    def signup(self, user_sign_up_dto: UserSignUpDTO) -> str:
         return "signup"
 
     def signin(self) -> str:
