@@ -2,7 +2,6 @@ from flask import Blueprint, request
 from controllers.v1.AuthController import AuthController
 from controllers.v1.UserSignUpDTO import UserSignUpDTO
 from utils.HttpMethods import HttpMethods
-from utils.decorators import body
 
 auth_blueprint = Blueprint('users', __name__, url_prefix='/users')
 
@@ -10,8 +9,8 @@ auth_controller = AuthController()
 
 
 @auth_blueprint.route('/signup', methods=[HttpMethods.POST.value])
-@body(UserSignUpDTO)
-def signup(user_sign_up_dto: UserSignUpDTO):
+def signup():
+    user_sign_up_dto = UserSignUpDTO(**request.json)
     return auth_controller.signup(user_sign_up_dto)
 
 
