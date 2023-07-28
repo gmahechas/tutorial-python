@@ -17,10 +17,10 @@ def body(_class):
         def decorator():
             instance = _class(**request.json)
             return _function(instance)
+
         return decorator
 
     return wrapper
-
 
 # def body(_class):
 #     def wrapper(_function):
