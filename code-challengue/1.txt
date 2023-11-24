@@ -1,9 +1,0 @@
-Implementa una función cuenta_subcadenas_ax(cadena) que devuelva el número de subcadenas contenidas en el string cadena que comienzan por la letra A y terminan por la letra X.
-
-Por ejemplo, dada la cadena de entrada "CAXAAYXZA", hay cuatro subcadenas que comienzan con "A" y terminan con "X", que son: AX, AXAAYX, AAYX y AYX.
-Consideraciones:
-
-No uses bucles anidados.
-No uses expresiones regulares.
-La cadena de entrada estará formada únicamente por letras en mayúscula.
-La función debe devolver un número entero con el número de subcadenas encontradas.
