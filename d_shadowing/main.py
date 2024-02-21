@@ -8,6 +8,6 @@ def my_func() -> None:
 	x = z + 20
 	print(x)
 
-my_func()
-
-print(x)
+if __name__ == "__main__":
+	my_func()
+	print(x)
