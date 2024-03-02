@@ -5,7 +5,7 @@ class User:
 	__age: int | None = None
 	__active: bool | None = None
 
-	def __init__(self, username, email, age, active):
+	def __init__(self, username: str, email: str, age: int, active: bool):
 		self.__username = username
 		self.__email = email
 		self.__age = age
