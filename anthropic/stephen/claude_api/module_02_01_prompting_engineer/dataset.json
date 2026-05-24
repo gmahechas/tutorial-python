@@ -1,0 +1,48 @@
+[
+  {
+    "prompt_inputs": {
+      "height": "175",
+      "weight": "68",
+      "goal": "Marathon race preparation - carb loading day before race",
+      "restrictions": "No dairy, no shellfish"
+    },
+    "solution_criteria": [
+      "Total calories approximately 3000+",
+      "High carbohydrate emphasis (60-70% of calories)",
+      "Avoids dairy and shellfish",
+      "Meals distributed across breakfast, lunch, dinner with snacks"
+    ],
+    "task_description": "write a compact, concise 1 day meal plan for a single athlete",
+    "scenario": "Testing with a marathon runner requiring high carbohydrate intake (3000+ calories) for race preparation day"
+  },
+  {
+    "prompt_inputs": {
+      "height": "175",
+      "weight": "68",
+      "goal": "maintain energy for twice-daily swim training while supporting teenage growth",
+      "restrictions": "moderate budget, no shellfish"
+    },
+    "solution_criteria": [
+      "Provides 6 meals/snacks distributed throughout the day",
+      "Includes adequate protein (100-120g) and carbohydrates for training recovery",
+      "Uses affordable, accessible ingredients suitable for a moderate budget"
+    ],
+    "task_description": "write a compact, concise 1 day meal plan for a single athlete",
+    "scenario": "Testing with a teenage swimmer (16 years old) needing balanced nutrition for training and growth on a moderate budget"
+  },
+  {
+    "prompt_inputs": {
+      "height": "178",
+      "weight": "88",
+      "goal": "cutting phase - lose fat while maintaining muscle, targeting 1800 calories daily with 40% protein",
+      "restrictions": "none"
+    },
+    "solution_criteria": [
+      "Total calories approximately 1800",
+      "Protein content around 40% of total calories (180g)",
+      "Includes breakfast, lunch, dinner with specific foods and portions"
+    ],
+    "task_description": "write a compact, concise 1 day meal plan for a single athlete",
+    "scenario": "Testing with a weightlifter on a cutting phase needing high protein, low calorie meals (1800 calories, 40% protein)"
+  }
+]

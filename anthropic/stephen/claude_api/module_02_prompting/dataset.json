@@ -1,0 +1,17 @@
+[
+    {
+        "task": "Write a Python function that takes an AWS S3 ARN string and extracts the bucket name and object key as a dictionary",
+        "format": "python",
+        "solution_criteria": "Function correctly parses ARN format (arn:aws:s3:::bucket-name/object-key), handles edge cases like missing keys, returns dict with 'bucket' and 'key' fields, handles invalid ARN gracefully"
+    },
+    {
+        "task": "Create a JSON object representing an AWS IAM policy that allows read-only access to a specific S3 bucket named 'my-data-bucket'",
+        "format": "json",
+        "solution_criteria": "Valid IAM policy JSON structure with Version, Statement array, correct Effect (Allow), appropriate Action (s3:GetObject, s3:ListBucket), Resource ARN pointing to 'my-data-bucket', follows AWS IAM policy syntax"
+    },
+    {
+        "task": "Write a regular expression that validates AWS EC2 instance IDs (format: i-xxxxxxxxxxxxxxxxx where x is alphanumeric)",
+        "format": "regex",
+        "solution_criteria": "Matches valid instance ID format starting with 'i-', followed by exactly 17 alphanumeric characters (both old 8-char and new 17-char formats should be considered, but focus on current 17-char), case-insensitive, anchored to match full string"
+    }
+]
