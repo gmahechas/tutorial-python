@@ -61,6 +61,10 @@ def set_reminder(content, timestamp):
     print(f"----\nSetting the following reminder for {timestamp}:\n{content}\n----")
 
 
+def save_article(**kwargs):
+    return "Article saved!"
+
+
 get_current_datetime_schema = ToolParam(
     {
         "name": "get_current_datetime",
@@ -176,3 +180,34 @@ article_summary_schema = {
         "required": ["title", "author", "key_insights"],
     },
 }
+
+save_article_schema = ToolParam(
+    {
+        "name": "save_article",
+        "description": "Saves a scholarly journal article",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "abstract": {
+                    "type": "string",
+                    "description": "Abstract of the article. One short sentence max",
+                },
+                "meta": {
+                    "type": "object",
+                    "properties": {
+                        "word_count": {
+                            "type": "integer",
+                            "description": "Word count",
+                        },
+                        "review": {
+                            "type": "string",
+                            "description": "Eight sentence review of the paper",
+                        },
+                    },
+                    "required": ["word_count", "review"],
+                },
+            },
+            "required": ["abstract", "meta"],
+        },
+    }
+)

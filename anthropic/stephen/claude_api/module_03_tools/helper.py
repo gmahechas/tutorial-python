@@ -1,13 +1,13 @@
 import os
 import json
 from anthropic import Anthropic
-from anthropic.types import Message
 from tools import (
     add_duration_to_datetime,
     add_duration_to_datetime_schema,
     batch_tool_schema,
     get_current_datetime_schema,
     get_current_datetime,
+    save_article,
     set_reminder,
     set_reminder_schema,
 )
@@ -21,7 +21,7 @@ client = Anthropic(
 def add_user_message(messages, message):
     user_message = {
         "role": "user",
-        "content": message.content if isinstance(message, Message) else message,
+        "content": message.content if hasattr(message, "content") else message,
     }
     messages.append(user_message)
     return messages
@@ -30,7 +30,7 @@ def add_user_message(messages, message):
 def add_assistant_message(messages, message):
     assistant_message = {
         "role": "assistant",
-        "content": message.content if isinstance(message, Message) else message,
+        "content": message.content if hasattr(message, "content") else message,
     }
     messages.append(assistant_message)
     return messages
@@ -90,6 +90,8 @@ def run_tool(tool_name, tool_input):
         return set_reminder(**tool_input)
     elif tool_name == "batch_tool":
         return run_batch_tool(tool_input["invocations"])
+    elif tool_name == "save_article":
+        return save_article(**tool_input)
 
 
 def run_tools(response):
@@ -123,7 +125,7 @@ def run_conversation(messages):
                 get_current_datetime_schema,
                 add_duration_to_datetime_schema,
                 set_reminder_schema,
-                #batch_tool_schema, # removing this tools the agent will send 2 separate tool calls
+                # batch_tool_schema, # removing this tools the agent will send 2 separate tool calls
             ],
         )
         add_assistant_message(messages, response)
@@ -134,5 +136,75 @@ def run_conversation(messages):
 
         tool_results = run_tools(response)
         add_user_message(messages, tool_results)
+
+    return messages
+
+
+def chat_stream(
+    messages,
+    system=None,
+    temperature=1.0,
+    stop_sequences=[],
+    tools=None,
+    tool_choice=None,
+    betas=[],
+):
+    params = {
+        "model": "claude-sonnet-4-5-20250929",
+        "max_tokens": 1000,
+        "messages": messages,
+        "temperature": temperature,
+        "stop_sequences": stop_sequences,
+    }
+
+    if tool_choice:
+        params["tool_choice"] = tool_choice
+
+    if tools:
+        params["tools"] = tools
+
+    if system:
+        params["system"] = system
+
+    if betas:
+        params["betas"] = betas
+
+    return client.beta.messages.stream(**params)
+
+
+def run_conversation_stream(messages, tools=[], tool_choice=None, fine_grained=False):
+    while True:
+        with chat_stream(
+            messages,
+            tools=tools,
+            betas=["fine-grained-tool-streaming-2025-05-14"] if fine_grained else [],
+            tool_choice=tool_choice,
+        ) as stream:
+            for chunk in stream:
+                if chunk.type == "text":
+                    print(chunk.text, end="")
+
+                if chunk.type == "content_block_start":
+                    if chunk.content_block.type == "tool_use":
+                        print(f'\n>>> Tool Call: "{chunk.content_block.name}"')
+
+                if chunk.type == "input_json" and chunk.partial_json:
+                    print(chunk.partial_json, end="")
+
+                if chunk.type == "content_block_stop":
+                    print("\n")
+
+            response = stream.get_final_message()
+
+        add_assistant_message(messages, response)
+
+        if response.stop_reason != "tool_use":
+            break
+
+        tool_results = run_tools(response)
+        add_user_message(messages, tool_results)
+
+        if tool_choice:
+            break
 
     return messages
