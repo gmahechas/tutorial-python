@@ -2,15 +2,19 @@ import os
 import json
 from anthropic import Anthropic
 from tools import (
+    TextEditorTool,
     add_duration_to_datetime,
     add_duration_to_datetime_schema,
     batch_tool_schema,
     get_current_datetime_schema,
     get_current_datetime,
+    get_text_edit_schema,
     save_article,
     set_reminder,
     set_reminder_schema,
 )
+
+text_editor_tool = TextEditorTool()
 
 client = Anthropic(
     api_key=os.environ.get("ANTHROPIC_AUTH_TOKEN"),
@@ -51,6 +55,30 @@ def run_tool(tool_name, tool_input):
         return run_batch_tool(tool_input["invocations"])
     elif tool_name == "save_article":
         return save_article(**tool_input)
+    elif tool_name == "str_replace_based_edit_tool":
+        command = tool_input["command"]
+        if command == "view":
+            return text_editor_tool.view(
+                tool_input["path"], tool_input.get("view_range")
+            )
+        elif command == "str_replace":
+            return text_editor_tool.str_replace(
+                tool_input["path"], tool_input["old_str"], tool_input["new_str"]
+            )
+        elif command == "create":
+            return text_editor_tool.create(tool_input["path"], tool_input["file_text"])
+        elif command == "insert":
+            return text_editor_tool.insert(
+                tool_input["path"],
+                tool_input["insert_line"],
+                tool_input["new_str"],
+            )
+        elif command == "undo_edit":
+            return text_editor_tool.undo_edit(tool_input["path"])
+        else:
+            raise Exception(f"Unknown text editor command: {command}")
+    else:
+        raise Exception(f"Unknown tool name: {tool_name}")
 
 
 def run_batch_tool(invocations=[]):
@@ -72,6 +100,7 @@ def run_batch_tool(invocations=[]):
 def run_tools(response):
     tool_requests = [block for block in response.content if block.type == "tool_use"]
     tool_result_blocks = []
+
     for tool_request in tool_requests:
         try:
             tool_output = run_tool(tool_request.name, tool_request.input)
@@ -125,6 +154,7 @@ def run_conversation(messages):
                 get_current_datetime_schema,
                 add_duration_to_datetime_schema,
                 set_reminder_schema,
+                get_text_edit_schema,
                 # batch_tool_schema, # removing this tools the agent will send 2 separate tool calls
             ],
         )
