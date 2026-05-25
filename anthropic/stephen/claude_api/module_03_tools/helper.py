@@ -146,17 +146,19 @@ def chat(
     return message
 
 
-def run_conversation(messages):
+def run_conversation(messages, tools=None, tool_choice=None):
+    conversation_tools = tools or [
+        get_current_datetime_schema,
+        add_duration_to_datetime_schema,
+        set_reminder_schema,
+        get_text_edit_schema,
+        # batch_tool_schema, # removing this tools the agent will send 2 separate tool calls
+    ]
     while True:
         response = chat(
             messages,
-            tools=[
-                get_current_datetime_schema,
-                add_duration_to_datetime_schema,
-                set_reminder_schema,
-                get_text_edit_schema,
-                # batch_tool_schema, # removing this tools the agent will send 2 separate tool calls
-            ],
+            tools=conversation_tools,
+            tool_choice=tool_choice,
         )
         add_assistant_message(messages, response)
         print(text_from_message(response))
