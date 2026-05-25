@@ -35,32 +35,6 @@ def add_assistant_message(messages, message):
     messages.append(assistant_message)
     return messages
 
-
-def chat(
-    messages,
-    system_prompt=None,
-    temperature=1.0,
-    stop_sequences=[],
-    tools=None,
-    tool_choice=None,
-):
-    params = {
-        "model": "claude-sonnet-4-5-20250929",
-        "max_tokens": 1024,
-        "messages": messages,
-        "temperature": temperature,
-        "stop_sequences": stop_sequences,
-    }
-    if system_prompt:
-        params["system"] = system_prompt
-    if tools:
-        params["tools"] = tools
-    if tool_choice:
-        params["tool_choice"] = tool_choice
-    message = client.messages.create(**params)
-    return message
-
-
 def text_from_message(message):
     return "\n".join([block.text for block in message.content if block.type == "text"])
 
@@ -116,6 +90,30 @@ def run_tools(response):
         tool_result_blocks.append(tool_result_block)
     return tool_result_blocks
 
+
+def chat(
+    messages,
+    system_prompt=None,
+    temperature=1.0,
+    stop_sequences=[],
+    tools=None,
+    tool_choice=None,
+):
+    params = {
+        "model": "claude-sonnet-4-5-20250929",
+        "max_tokens": 1024,
+        "messages": messages,
+        "temperature": temperature,
+        "stop_sequences": stop_sequences,
+    }
+    if system_prompt:
+        params["system"] = system_prompt
+    if tools:
+        params["tools"] = tools
+    if tool_choice:
+        params["tool_choice"] = tool_choice
+    message = client.messages.create(**params)
+    return message
 
 def run_conversation(messages):
     while True:
