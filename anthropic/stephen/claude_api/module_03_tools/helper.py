@@ -40,6 +40,19 @@ def text_from_message(message):
     return "\n".join([block.text for block in message.content if block.type == "text"])
 
 
+def run_tool(tool_name, tool_input):
+    if tool_name == "get_current_datetime":
+        return get_current_datetime(**tool_input)
+    elif tool_name == "add_duration_to_datetime":
+        return add_duration_to_datetime(**tool_input)
+    elif tool_name == "set_reminder":
+        return set_reminder(**tool_input)
+    elif tool_name == "batch_tool":
+        return run_batch_tool(tool_input["invocations"])
+    elif tool_name == "save_article":
+        return save_article(**tool_input)
+
+
 def run_batch_tool(invocations=[]):
     batch_output = []
     for invocation in invocations:
@@ -54,19 +67,6 @@ def run_batch_tool(invocations=[]):
             }
         )
     return batch_output
-
-
-def run_tool(tool_name, tool_input):
-    if tool_name == "get_current_datetime":
-        return get_current_datetime(**tool_input)
-    elif tool_name == "add_duration_to_datetime":
-        return add_duration_to_datetime(**tool_input)
-    elif tool_name == "set_reminder":
-        return set_reminder(**tool_input)
-    elif tool_name == "batch_tool":
-        return run_batch_tool(tool_input["invocations"])
-    elif tool_name == "save_article":
-        return save_article(**tool_input)
 
 
 def run_tools(response):
