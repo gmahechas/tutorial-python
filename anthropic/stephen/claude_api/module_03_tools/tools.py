@@ -128,6 +128,37 @@ set_reminder_schema = {
     },
 }
 
+save_article_schema = ToolParam(
+    {
+        "name": "save_article",
+        "description": "Saves a scholarly journal article",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "abstract": {
+                    "type": "string",
+                    "description": "Abstract of the article. One short sentence max",
+                },
+                "meta": {
+                    "type": "object",
+                    "properties": {
+                        "word_count": {
+                            "type": "integer",
+                            "description": "Word count",
+                        },
+                        "review": {
+                            "type": "string",
+                            "description": "Eight sentence review of the paper",
+                        },
+                    },
+                    "required": ["word_count", "review"],
+                },
+            },
+            "required": ["abstract", "meta"],
+        },
+    }
+)
+
 batch_tool_schema = {
     "name": "batch_tool",
     "description": "Invoke multiple other tool calls simultaneously",
@@ -180,34 +211,3 @@ article_summary_schema = {
         "required": ["title", "author", "key_insights"],
     },
 }
-
-save_article_schema = ToolParam(
-    {
-        "name": "save_article",
-        "description": "Saves a scholarly journal article",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "abstract": {
-                    "type": "string",
-                    "description": "Abstract of the article. One short sentence max",
-                },
-                "meta": {
-                    "type": "object",
-                    "properties": {
-                        "word_count": {
-                            "type": "integer",
-                            "description": "Word count",
-                        },
-                        "review": {
-                            "type": "string",
-                            "description": "Eight sentence review of the paper",
-                        },
-                    },
-                    "required": ["word_count", "review"],
-                },
-            },
-            "required": ["abstract", "meta"],
-        },
-    }
-)
