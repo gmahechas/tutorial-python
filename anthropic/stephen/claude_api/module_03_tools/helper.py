@@ -35,6 +35,7 @@ def add_assistant_message(messages, message):
     messages.append(assistant_message)
     return messages
 
+
 def text_from_message(message):
     return "\n".join([block.text for block in message.content if block.type == "text"])
 
@@ -114,6 +115,7 @@ def chat(
         params["tool_choice"] = tool_choice
     message = client.messages.create(**params)
     return message
+
 
 def run_conversation(messages):
     while True:
