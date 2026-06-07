@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 from anthropic import Anthropic
 from tools import (
     TextEditorTool,
@@ -46,10 +47,14 @@ def text_from_message(message):
     output = []
     for block in message.content:
         if block.type == "thinking":
-            signature_label = " (signature present)" if getattr(block, "signature", None) else ""
+            signature_label = (
+                " (signature present)" if getattr(block, "signature", None) else ""
+            )
             output.append(f"[thinking{signature_label}]\n{block.thinking}")
         elif block.type == "redacted_thinking":
-            output.append("[redacted thinking]\nThinking content was redacted by Anthropic.")
+            output.append(
+                "[redacted thinking]\nThinking content was redacted by Anthropic."
+            )
         elif block.type == "text":
             output.append(block.text)
     return "\n\n".join(output)
@@ -155,10 +160,23 @@ def chat(
             "type": "enabled",
             "budget_tokens": thinking_budget,
         }
-    if system_prompt:
-        params["system"] = system_prompt
+
     if tools:
-        params["tools"] = tools
+        tools_clone = tools.copy()
+        last_tool = dict(tools_clone[-1])
+        last_tool["cache_control"] = {"type": "ephemeral"}
+        tools_clone[-1] = last_tool
+        params["tools"] = tools_clone
+
+    if system_prompt:
+        params["system"] = [
+            {
+                "type": "text",
+                "text": system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+
     if tool_choice:
         params["tool_choice"] = tool_choice
     message = client.messages.create(**params)
@@ -166,7 +184,12 @@ def chat(
 
 
 def run_conversation(
-    messages, tools=None, tool_choice=None, thinking=False, thinking_budget=1024
+    messages,
+    tools=None,
+    tool_choice=None,
+    thinking=False,
+    thinking_budget=1024,
+    system_prompt=None,
 ):
     conversation_tools = tools or [
         get_current_datetime_schema,
@@ -178,6 +201,7 @@ def run_conversation(
     while True:
         response = chat(
             messages,
+            system_prompt=system_prompt,
             tools=conversation_tools,
             tool_choice=tool_choice,
             thinking=thinking,
@@ -263,3 +287,59 @@ def run_conversation_stream(messages, tools=[], tool_choice=None, fine_grained=F
             break
 
     return messages
+
+
+def upload(file_path):
+    path = Path(file_path)
+    extension = path.suffix.lower()
+
+    mime_type_map = {
+        ".pdf": "application/pdf",
+        ".txt": "text/plain",
+        ".md": "text/plain",
+        ".py": "text/plain",
+        ".js": "text/plain",
+        ".html": "text/plain",
+        ".css": "text/plain",
+        ".csv": "text/csv",
+        ".json": "application/json",
+        ".xml": "application/xml",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xls": "application/vnd.ms-excel",
+        ".jpeg": "image/jpeg",
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+    }
+
+    mime_type = mime_type_map.get(extension)
+
+    if not mime_type:
+        raise ValueError(f"Unknown mimetype for extension: {extension}")
+    filename = path.name
+
+    with open(file_path, "rb") as file:
+        return client.beta.files.upload(file=(filename, file, mime_type))
+
+
+def list_files():
+    return client.beta.files.list()
+
+
+def delete_file(id):
+    return client.beta.files.delete(id)
+
+
+def download_file(id, filename=None):
+    file_content = client.beta.files.download(id)
+
+    if not filename:
+        file_metadata = get_metadata(id)
+        file_content.write_to_file(file_metadata.filename)
+    else:
+        file_content.write_to_file(filename)
+
+
+def get_metadata(id):
+    return client.beta.files.retrieve_metadata(id)
