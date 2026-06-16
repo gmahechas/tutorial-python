@@ -486,6 +486,48 @@ Model Context Protocol es una forma estandarizada de darle a Claude acceso a too
 
 ---
 
+## Módulo 07 - Claude Code & Computer Use
+Este módulo cambia de tono: en vez de armar piezas del API tú mismo, examinas **dos productos terminados de Anthropic** — Claude Code y Computer Use — como casos de estudio de agentes reales en producción. La idea no es solo aprender a usarlos, sino **destilar el patrón "agente"** observándolos por dentro: cómo deciden qué hacer, qué tools les dan, cómo manejan estado, dónde fallan.
+
+### Clase 01 - `claude_code_01.txt`
+- **Tema:** intro al módulo. Vista panorámica de Claude Code y Computer Use, y por qué son los ejemplos de agente que el curso usa.
+- **Idea clave:** Un **agente** no es magia ni un modelo más grande — es el patrón que ya construiste en Módulo 03: `tool loop` + `system prompt` + `tools` + `state`. Claude Code y Computer Use son ese mismo loop, **escalado y endurecido**:
+  - **Claude Code** = asistente de código en terminal. Sus tools típicos son leer/escribir archivos (Módulo 03 Clase 07), correr comandos shell, búsqueda en el repo.
+  - **Computer Use** = un set de tools que le da a Claude la habilidad de mover mouse, escribir teclado, tomar screenshots — efectivamente operar una computadora como humano.
+- **Por qué importan estos casos de estudio:**
+  - Claude Code y Computer Use son **referencias canónicas** de cómo Anthropic mismo arma agentes — no ejemplos de tutorial. Si vas a construir un agente, copiar su forma te ahorra meses de re-aprender patrones que ya están resueltos.
+  - Te permiten reconocer la diferencia entre "un chatbot con un tool" (no es agente) y un agente real: **autonomía multi-paso**, **observación → decisión → acción → re-observación**, **manejo de errores que no aborta el loop**, **memoria de progreso dentro de la tarea**.
+- **Mejores prácticas (anticipadas para todo el módulo):**
+  - **Antes de construir tu propio agente, usa Claude Code y Computer Use por al menos un día.** Te ahorras las primeras 10 ideas malas que ya están refutadas.
+  - **El loop de Módulo 03 (`run_conversation`) es la espina dorsal**: cualquier agente que construyas va a ser una variante de ese loop. La diferencia entre un chatbot toy y un agente productivo está en los **tools que le des** y en el **system prompt** que defina su rol y límites — no en una arquitectura nueva.
+  - **El system prompt de un agente es un documento operativo**, no una línea de tono. Define identidad, herramientas disponibles, política de errores, política de confirmación destructiva, formato de output, cuándo parar. Claude Code es 80% prompt + 20% tools.
+  - **Sandbox primero, capacidades después**: tanto Claude Code como Computer Use operan con paths sandboxeados (Claude Code) o sesiones aisladas (Computer Use). Cuando construyas un agente que toca el sistema, sandbox antes de la primera demo, no después del primer incidente.
+  - **Confirmación humana para acciones irreversibles**: borrar archivos, push, deploys, mensajes externos. Claude Code pregunta antes de ejecutar comandos potencialmente destructivos — copia ese patrón.
+  - **Streaming + tool-use es el UX por defecto** para agentes interactivos: el usuario ve qué está haciendo Claude *mientras* lo hace, no después de 30 segundos en negro. Combina Módulo 01 Clase 05 (streaming) con Módulo 03 (tool loop).
+  - **Evals son obligatorios para agentes de verdad**: un agente sin eval set es una demo. Aplica Módulo 02 / 02.1 a las tareas que tu agente debe poder hacer end-to-end, no solo a llamadas individuales.
+
+### Clase 02 - `claude_code_02.txt`
+- **Tema:** qué es Claude Code, qué tools trae de fábrica y cómo instalarlo.
+- **Idea clave:** Claude Code es un programa que corre en tu terminal y combina tres tipos de capacidades en un solo agente:
+  - **Tools básicos integrados**: search, read, edit de archivos. Estos cubren la mayoría del trabajo de programación día a día.
+  - **Tools avanzados integrados**: web fetching y terminal access (correr comandos shell). Aquí Claude Code deja de ser "editor con AI" y se convierte en un agente que puede investigar, instalar dependencias, correr tests, hacer commits.
+  - **Cliente MCP**: Claude Code consume servidores MCP (Módulo 05). Cualquier MCP server que escribas o instales se vuelve parte del toolset de Claude Code automáticamente — extensión sin tocar el binario.
+- **Setup en 3 pasos** (los del transcript):
+  1. **Verifica Node.js**: `npm help` en terminal. Si responde, ya lo tienes; si no, instala Node primero.
+  2. **Instala Claude Code**: vía `npm install` (típicamente `npm install -g @anthropic-ai/claude-code` — checa docs oficiales para el comando exacto y actualizado).
+  3. **Login**: corre `claude` en cualquier terminal — abrirá un flujo de autenticación contra tu cuenta Anthropic.
+- **Guía oficial**: `docs.anthropic.com` — la fuente de verdad para flags, settings, troubleshooting y nuevos tools que se vayan agregando.
+- **Mejores prácticas:**
+  - **Cuenta de billing antes que nada**: cada sesión de Claude Code consume tokens contra tu cuenta Anthropic. Antes de soltarlo en un proyecto grande, revisa tu plan / límites — un agente loopeando sobre un repo entero puede ser caro.
+  - **Encadena Claude Code con MCP servers que ya tienes**: si construiste un MCP server en Módulo 05 (o consumes uno de tu organización), Claude Code lo levanta como cliente. Tus integraciones se vuelven herramientas de codear sin escribir glue.
+  - **Trata `claude` como un comando, no como una app**: corre `claude` dentro del directorio del proyecto que quieres tocar. El cwd al lanzar define el sandbox de archivos y el contexto.
+  - **Empieza preguntando, no ordenando**: en sesiones nuevas, primero pídele a Claude Code que explore el repo (`"explica la arquitectura de este proyecto"`, `"qué hace este archivo"`). Le das contexto antes de pedir cambios — los cambios salen mejor.
+  - **Conoce los slash commands**: Claude Code expone comandos como `/help`, `/clear`, `/config`, etc. (similar a los slash commands MCP del Módulo 05 Clase 09). Aprenderlos al inicio te ahorra pelearte con la UI después.
+  - **Permisos antes de autonomía**: por defecto Claude Code pide confirmación antes de comandos shell potencialmente destructivos. Resiste la tentación de ponerlo en modo "yolo" hasta que confíes en el flujo de tu tarea — un `rm -rf` mal disparado no se deshace.
+  - **Mismo patrón que tu propio agente**: lo que estás viendo bajo el capó es exactamente el `run_conversation` de Módulo 03 con el `text_edit_tool` (Clase 07) + acceso a shell + cliente MCP. No hay magia nueva — es composición de piezas que ya construiste.
+
+---
+
 ## Takeaways Centrales del Curso
 - **Trata prompts, tools y contexto como un solo sistema.** Un buen prompt con chunks malos falla silenciosamente; un gran chunk sin system prompt también.
 - **Para output confiable, prefiere tools.** Tools > prefill+stop > parsing de texto libre. Cae al siguiente nivel solo cuando el anterior es imposible.
