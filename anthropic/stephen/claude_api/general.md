@@ -769,6 +769,381 @@ Este módulo cambia de tono: en vez de armar piezas del API tú mismo, examinas 
 
 ---
 
+## Módulo 08 - Agentic Workflows
+Este módulo es el **mapa mental** de cómo orquestar a Claude para tareas complejas. Hasta ahora viste piezas (prompts, tools, RAG, MCP, agentes); este módulo te da el **vocabulario** para combinarlas en patrones reutilizables. Es uno de los módulos más importantes del curso porque deja de enseñar *"cómo se llama tal API"* y empieza a enseñar **cómo pensar el diseño de un sistema con Claude**.
+
+### Vocabulario base del módulo
+- **Workflow** y **Agent** son dos estrategias para resolver tareas que Claude **no puede completar en un solo request**. No son magia ni APIs nuevas — son *formas de orquestar* múltiples llamadas a Claude para llegar al resultado.
+- Ya construiste agentes y workflows sin saberlo: cada vez que usaste el tool loop del Módulo 03, eso era un agente. El módulo solo te da el nombre.
+
+### La regla de oro — ¿Workflow o Agent?
+> *"Si tienes una idea precisa de la tarea y conoces la serie exacta de pasos para completarla → **workflow**. Si no estás seguro de los detalles y necesitas que Claude descubra cómo resolverlo → **agent**."*
+
+Pónlo en términos de cocina: **workflow es una receta, agent es un chef**.
+- **Receta (workflow)**: pasos fijos, en orden, predecibles. Buena cuando sabes exactamente qué tiene que pasar — *"primero pica cebolla, luego sofríe, luego agrega tomate"*.
+- **Chef (agent)**: le das ingredientes y un objetivo, él decide qué hacer — *"hazme algo rico con estos ingredientes"*. Más flexible, menos predecible.
+
+### Por qué los workflows son patrones, no código
+Identificar un workflow **no implementa nada por ti** — todavía tienes que escribir el código. La razón de aprenderlos es que **otros ingenieros ya descubrieron qué patrones funcionan**, y al saberlos te ahorras re-inventar la rueda. Igual que aprender "Singleton" o "Observer" en diseño orientado a objetos — los patrones no son librerías, son vocabulario.
+
+### Clase 01 - `agentic_workflows_01.txt`
+- **Tema:** introducción a workflows + el primer patrón con nombre: **Evaluator-Optimizer**.
+- **Idea clave:** un workflow es una **secuencia pre-diseñada de llamadas a Claude** para resolver un problema específico cuyos pasos conoces de antemano. El primer patrón nombrado es el ciclo **producer ↔ grader** que itera hasta cumplir un criterio de calidad.
+
+#### El ejemplo del profesor: Imagen → modelo 3D
+La app: el usuario sube una imagen de una pieza metálica, la app la convierte en un modelo 3D y devuelve un **archivo STEP** (formato estándar de la industria para compartir modelos 3D, similar a un PDF pero para CAD).
+
+**Pasos del workflow:**
+1. **Describir la imagen**: imagen → Claude → *"describe esta pieza con mucho detalle"* (vision del Módulo 04 Clase 02).
+2. **Modelar en código**: descripción → Claude → genera código Python con la librería **CADQuery** (librería de modelado sólido 3D que produce archivos STEP).
+3. **Renderizar el modelo**: el código se ejecuta → produce un archivo STEP → se renderiza una imagen 2D del modelo.
+4. **Evaluar el resultado**: render → Claude → *"¿qué tan bien representa este render la imagen original que subió el usuario?"*.
+5. **Decidir**:
+   - Si el render es fiel → ✓ termina, devuelve el STEP file.
+   - Si hay errores grandes → vuelve al paso 2 con feedback de qué falla, y reintenta.
+6. **Repetir** hasta que el render pase la evaluación (o se acabe el budget de iteraciones).
+
+#### El patrón: Evaluator-Optimizer
+
+```
+input → ┌─────────────┐    output    ┌──────────┐
+        │  Producer   │ ───────────→ │  Grader  │
+        │ (genera)    │              │ (evalúa) │
+        └─────────────┘              └──────────┘
+              ↑                            │
+              │       feedback             │
+              └────────────────────────────┘
+                 (si no pasa el criterio)
+
+                 ✓ pasa → fin
+```
+
+- **Producer**: genera un output a partir del input. Puede ser una llamada a Claude, código que llama varias veces, una pipeline entera. En el ejemplo: `Claude + CADQuery + render`.
+- **Grader**: evalúa si el output cumple el criterio. Casi siempre es otra llamada a Claude (LLM-as-judge, Módulo 02 Clase 02). En el ejemplo: vision comparando render vs imagen original.
+- **Loop**: si falla, el feedback del grader vuelve al producer como input adicional → reintenta.
+
+#### Cuándo usar Evaluator-Optimizer
+- **Sí**: cuando la calidad del output es **subjetiva o difícil de verificar deterministamente**, pero **fácil de juzgar** una vez generada (escritura, código complejo, modelos 3D, summarization, traducciones).
+- **No**: cuando puedes verificar el output con código simple (un test unitario, una validación de schema, un parse de JSON). Para eso usa el patrón "generar → validar → reintentar" sin LLM judge — es 10× más barato.
+
+#### Conexiones con módulos anteriores (esto valida el patrón)
+- **El grader es un LLM-as-judge** (Módulo 02 Clase 02): mismas reglas — pídele JSON estructurado, temperature=0, criterios explícitos.
+- **El render-en-imagen + vision** es el truco del Módulo 04 Clase 02: Claude no puede "ver" un archivo STEP, pero sí puede ver un PNG renderizado del STEP. El workflow **adapta el output al canal sensorial de Claude** (visual).
+- **El loop de iteración** es el mismo concepto que el tool loop del Módulo 03 Clase 02 (`while stop_reason != "tool_use"`), pero a un nivel más alto: aquí lo que loopea es la decisión *"¿el output es bueno?"*, no *"¿hay otro tool_use?"*.
+- **Re-ranking de RAG (Módulo 06 Clase 08) es Evaluator-Optimizer disfrazado**: producer = retrieval híbrido, grader = Claude reordenando — solo que ahí el grader cambia el orden en vez de pedir reintentos.
+
+#### Mejores prácticas
+- **Pon un cap de iteraciones SIEMPRE**: el loop puede degenerar en infinito si el grader nunca está satisfecho. `max_iterations=3` o `max_iterations=5` es razonable. Si después de N intentos no pasa, devuelve el mejor output con un flag *"calidad parcial"* — el humano decide.
+- **El feedback al producer debe ser específico y accionable**: un grader que dice *"el render no se parece"* no ayuda. Pídele: *"identifica las 3 diferencias más importantes y dale instrucciones concretas al producer para corregirlas"*. Vago feedback = retry vago.
+- **Logea cada iteración**: tanto el output del producer como el veredicto del grader. Cuando un workflow falla en producción, sin esos logs estás ciego — no sabes si el producer es malo, el grader es muy estricto, o el feedback no se está aplicando.
+- **Cuesta N llamadas, no 1**: cada ciclo del loop es producer + grader = 2 llamadas mínimo. Con 3 iteraciones, 6 llamadas + el costo del render/herramienta. Estima costo y latencia antes de meter el patrón en un endpoint sincrónico — para tareas de >5 segundos, mueve a job asíncrono.
+- **El grader puede usar otro modelo más barato que el producer**: si tu producer es Opus generando código complejo, el grader puede ser Haiku evaluando el resultado contra una checklist (ver Módulo 06 Clase 08, mismo principio). El razonamiento de juicio es más barato que el de generación.
+- **No uses Evaluator-Optimizer cuando hay un test determinista disponible**: si tu output es JSON, valida con `json.loads`; si es código Python, intenta compilar con `ast.parse`; si es una query SQL, parsea con un parser de SQL. Tests deterministas son gratis y precisos. Reserva el grader-LLM para cuando el criterio es *"se ve bien"* o *"es relevante"*, no *"compila"*.
+- **El criterio del grader debe estar en el prompt, no en el código**: tentación: *"si el grader dice que el score es <7, reintenta"*. Mejor: pídele al grader que devuelva `{"passes": true/false, "reason": "..."}` y que **el grader mismo aplique el threshold**. Centralizas la política de calidad en el prompt, no en código de bajo nivel.
+- **Diseña el feedback como prompt-injection a tu propio sistema**: el feedback del grader se convierte en parte del prompt del producer en la siguiente iteración. Estructúralo: *"Intento previo falló por estas razones: [lista]. Corrige específicamente: [acciones]"*. Sin estructura, el producer puede ignorar el feedback o sobrecorregirlo.
+- **Workflows = pattern catalog, no librería**: como dice el profesor explícitamente — saber que un patrón se llama "Evaluator-Optimizer" no te da código gratis. Pero te da **vocabulario para discutir diseño con tu equipo** y **una checklist de qué debe llevar la implementación** (producer, grader, loop, max-iter, feedback shape). Eso es el valor.
+
+### Clase 02 - `agentic_workflows_02.txt`
+- **Tema:** segundo patrón con nombre — **Parallelization Workflow** (también llamado *fan-out / fan-in* o *divide-and-conquer*).
+- **Idea clave:** cuando una tarea grande implica considerar **muchos casos independientes**, en lugar de pedirle a Claude que evalúe todo en un solo prompt monstruoso, **divides el problema en N subtareas especializadas, las corres en paralelo, y luego un paso final agrega los resultados**. Claude piensa mejor cuando se enfoca en una cosa a la vez.
+
+#### El ejemplo del profesor: "¿de qué material construyo esta pieza?"
+La app: el usuario sube la foto de una pieza y la app le dice cuál es el mejor material (metal, polímero, cerámica, compuesto, elastómero, madera, etc.).
+
+**Tres formas de implementarlo, de peor a mejor:**
+
+**Intento 1 (mal)**: foto + prompt corto *"¿qué material recomiendas?"* → Claude tiene que sacar conclusiones sin criterios explícitos. Funciona, pero la calidad es ruido.
+
+**Intento 2 (peor de lo que parece)**: prompt gigante con criterios de *cuándo* usar metal, polímero, cerámica, etc., todo junto. Suena lógico, pero le pides a Claude **comparar múltiples materiales simultáneamente en una sola pasada** — se distrae, mezcla criterios, y la calidad cae. Más prompt ≠ mejor output.
+
+**Intento 3 (la solución del patrón)**:
+1. Lanza **N requests en paralelo**, uno por material:
+   - Request A: *"¿esta pieza es buena en metal? Considera: dureza, peso, costo, ..."*
+   - Request B: *"¿esta pieza es buena en polímero? Considera: flexibilidad, temperatura, costo, ..."*
+   - Request C: *"¿esta pieza es buena en cerámica? Considera: ..."*
+   - ... (uno por material)
+2. Cada respuesta es un **análisis especializado** de la idoneidad de un solo material.
+3. Un paso final, el **aggregator**, recibe los N análisis y le pide a Claude: *"dada esta evidencia, decide cuál material es el ganador y explica por qué"*.
+
+#### El patrón: Parallelization
+
+```
+              ┌──── Subtask 1 ────┐
+              │   (especializada)  │
+              ├──── Subtask 2 ────┤
+input ────────┤   (especializada)  │────→ Aggregator → output
+              ├──── Subtask 3 ────┤      (combina/decide)
+              │   (especializada)  │
+              └──── Subtask N ────┘
+
+         (corren al mismo tiempo)
+```
+
+- **Subtasks**: cada una resuelve **una rebanada** del problema con un prompt enfocado, corto y testeable.
+- **Aggregator**: Claude (u otra lógica) recibe los N resultados y produce el output final — comparando, sintetizando o eligiendo.
+- **Independencia**: las subtasks **no se ven entre sí**. Eso es lo que permite el paralelismo.
+
+#### Los 3 beneficios que el profesor nombra
+1. **Claude se enfoca en una cosa a la vez** → cada prompt es más simple, las respuestas más precisas. *Specialization beats generalization.*
+2. **Cada prompt se puede mejorar/evaluar por separado** → modular y testeable. Puedes correr el eval del Módulo 02 contra el prompt de "metal" sin tocar el de "polímero".
+3. **Escala bien** → agregar un material nuevo (titanio, fibra de carbono) es **agregar una subtask más**. No tienes que reescribir el prompt monstruoso de Intento 2.
+
+#### Cuándo usar Parallelization
+- **Sí**: cuando el problema **se descompone naturalmente en casos independientes** y la decisión final depende de comparar entre ellos (selección de material, screening de candidatos, multi-aspect review, scoring por criterios independientes, multi-language translation con QA por idioma).
+- **No**: cuando los pasos **dependen unos de otros** (output del paso 1 alimenta al paso 2). Eso es un *Sequential Pipeline*, otro patrón distinto. Forzar paralelismo donde hay dependencia secuencial rompe la lógica.
+
+#### Conexiones con módulos anteriores
+- **Module 02.1 PromptEvaluator** ya hizo esto a nivel de framework: `max_concurrent_tasks=3` corre múltiples test cases en paralelo. Mismo principio, distinto propósito (evals vs producción).
+- **Module 03 Clase 04 batch_tool** es el primo de bajo nivel: deja que Claude pida varias llamadas de tool en un turno. Parallelization es la versión a nivel de orquestación de tu app.
+- **RAG Clase 07 Retriever (Módulo 06)** es **Parallelization aplicado a retrieval**: vector index + BM25 corren en paralelo, RRF es el aggregator.
+- **Re-ranking (Módulo 06 Clase 08)** comparte la idea de "subtask especializada → aggregator final" pero con N=1 subtask. Parallelization es la generalización.
+
+#### Mejores prácticas
+- **Latencia es `max(subtasks) + aggregator`, no la suma**: ese es el valor real. 5 análisis de 3 segundos cada uno = ~3 segundos en paralelo, no 15. Si los corres serial, perdiste el patrón.
+- **Costo es `N + 1` llamadas, no `1`**: paralelizas latencia, no costo. Estima antes de lanzar — 7 materiales = 8 llamadas a Claude por upload. Para volumen alto, considera modelo barato (Haiku) en las subtasks y modelo bueno (Sonnet/Opus) solo en el aggregator.
+- **Implementa con `asyncio.gather` o `concurrent.futures.ThreadPoolExecutor`**: no es magia, es paralelismo de IO clásico. Cada subtask es un `await client.messages.create(...)` que corre concurrentemente con los otros.
+- **Diseña cada subtask como una unidad testeable**: el prompt de "evalúa metal" debe poder correrse aislado, evaluarse contra ejemplos hechos a mano, e iterarse sin tocar los demás. Eso es lo que distingue Parallelization bien hecha de "varias llamadas en paralelo".
+- **El aggregator no debe re-hacer el trabajo de las subtasks**: si tu aggregator vuelve a leer la imagen y reconsidera todo, eliminaste la división del trabajo. El aggregator solo recibe **los análisis**, no los inputs originales — confía en el análisis y decide.
+- **Estructura el input del aggregator**: pasa los N resultados como bloques XML claramente delimitados (`<analysis material="metal">...</analysis>`). Mismo principio del Módulo 06 Clase 08 (re-ranker): Claude maneja XML repetido sin confundirse.
+- **Aggregator necesita criterios de decisión explícitos**: *"elige el ganador"* es vago. Mejor: *"elige el material con el score de viabilidad más alto, desempatando por costo, luego por disponibilidad. Devuelve `{winner, reason, runner_up}`"*. Sin criterios, el aggregator improvisa.
+- **Maneja el caso "ningún subtask pasó"**: si las 7 subtasks dicen *"este material no funciona"*, el aggregator necesita una rama para *"ningún material es viable, devuelve los 2 menos malos con justificación"*. Sin esto, el aggregator alucina un ganador inexistente.
+- **Cap el fan-out**: 7 materiales está bien; 700 es ridículo. Si tu lista es enorme, agrega un paso previo de filtro (*"de los 700 candidatos, ¿cuáles 10 son plausibles?"*) y luego paraleliza solo esos 10. Pre-filter + parallelize > parallelize-everything.
+- **Subtasks pueden usar tools propios**: una subtask de "metal" puede tener acceso a un tool `lookup_metal_properties(name)` que las otras subtasks no tienen. Cada subtask puede ser un mini-agente especializado.
+- **Si una subtask falla, el aggregator debe enterarse**: no lo dejes en `null` silencioso. Pásale al aggregator *"el análisis de cerámica falló por timeout — decide con los demás"*. Datos faltantes explícitos > datos faltantes ocultos.
+- **El patrón generaliza más allá de "elige uno"**: aggregator puede sumar (scoring de calidad multi-aspect), promediar (consensus de N opiniones), filtrar (cuáles candidatos pasaron todos los checks), o sintetizar (un reporte final con secciones de cada subtask). El "elige el ganador" del demo es un caso particular.
+
+### Clase 03 - `agentic_workflows_03.txt`
+- **Tema:** tercer patrón con nombre — **Prompt Chaining** (también llamado *Sequential Pipeline*).
+- **Idea clave:** una tarea grande se rompe en una **secuencia ordenada** de pasos, donde el output de un paso es el input del siguiente. **La diferencia con Parallelization es la dependencia**: aquí los pasos van uno tras otro porque cada uno necesita el resultado del anterior.
+
+#### Ejemplo del profesor: marketing en redes sociales
+App que genera videos cortos:
+1. Buscar trending topics en Twitter (relacionados al tema del usuario).
+2. Claude **elige** el topic más interesante.
+3. Claude **investiga** ese topic en la web.
+4. Claude **escribe** un script para video corto.
+5. AI avatar + TTS **crean** el video.
+6. **Postear** a la red social.
+
+Cada paso depende del anterior — no se puede paralelizar.
+
+#### El patrón: Chaining
+
+```
+input → Step 1 → Step 2 → Step 3 → ... → output
+        (Claude)  (Claude)  (Claude)
+```
+
+#### El uso más importante (la joya de la clase)
+El profesor lo dice explícito: el caso real donde Chaining brilla es **forzar constraints que un prompt monolítico nunca cumple**. Escenario clásico:
+
+Quieres que Claude escriba un artículo y le dices: *"no menciones que eres AI, no uses emojis, no uses lenguaje cliché, tono profesional"*. Por más que repitas, **Claude inevitablemente viola alguna constraint**.
+
+**Solución con Chaining**:
+1. **Paso 1**: deja que Claude escriba el artículo, asume que va a violar reglas.
+2. **Paso 2 (rewriter pass)**: pásale el artículo y dile: *"encuentra menciones de AI y quítalas. Encuentra emojis y quítalos. Reescribe en tono profesional."*
+
+El paso 2 tiene **mucho menos en qué pensar** → cumple las constraints mucho mejor que un solo prompt monstruoso.
+
+#### Cuándo usar Chaining vs los otros patrones
+| Situación | Patrón |
+|-----------|--------|
+| Pasos independientes, mismo input | **Parallelization** |
+| Pasos donde cada uno depende del anterior | **Chaining** |
+| Output necesita validarse y reintentar | **Evaluator-Optimizer** |
+| Prompt monolítico viola constraints repetidamente | **Chaining (rewriter pass)** ← regla práctica clave |
+
+#### Conexiones con módulos anteriores
+- **Módulo 07 Clase 03 (Plan-first workflow)**: el "plan → implementa" de Claude Code es Chaining puro. Paso 1 = plan, paso 2 = código basado en el plan.
+- **Módulo 06 Clases 08 y 09 (re-ranking, contextual retrieval)**: cada uno es un paso de Chaining sobre un pipeline RAG (chunk → embed → retrieve → re-rank → contextualize).
+
+#### Mejores prácticas
+- **El "rewriter pass" es la aplicación más infravalorada**: si tu prompt principal tiene >5 constraints y Claude viola alguna persistentemente, **no escales el prompt — agrega un segundo paso de limpieza**. El segundo paso solo necesita la lista de constraints violadas y el output sucio.
+- **Cada paso = un prompt corto y enfocado**: si tu paso N tiene un prompt de 20 párrafos, probablemente debes partirlo en N1 y N2.
+- **Maneja errores entre pasos**: si el paso 2 falla, ¿reintentas solo ese paso? ¿reinicias todo? ¿devuelves el output del paso 1 con bandera? Decide ANTES de poner en producción.
+- **Logea el output de cada paso**: cuando un usuario reporta *"el video salió raro"*, necesitas ver qué dio el paso 3 vs paso 4 para saber dónde se rompió. Sin logs intermedios, debug imposible.
+- **Cada paso es testeable independientemente** (igual que en Parallelization): el paso 4 (escribir script) recibe una investigación como input — puedes testearlo con investigaciones hechas a mano sin correr los pasos 1-3.
+- **Cuesta `N` llamadas EN SERIE**: latencia = suma, no max (al revés de Parallelization). Para 6 pasos de 3s = 18s. Mueve a job asíncrono si va a un endpoint web.
+- **Claude no necesita ver la cadena entera**: cada paso solo recibe lo que necesita. No le pases los outputs de todos los pasos previos como contexto si solo el último importa — gastas tokens y confundes.
+- **Combina con Parallelization donde tenga sentido**: paso 3 (research) puede internamente paralelizar consultas a 3 fuentes distintas. Patrones se anidan.
+- **El patrón es tan obvio que casi no lo nombras — pero nombrarlo te recuerda usarlo**: el profesor explícitamente dice *"esto parece tan obvio que ni vale la pena mencionarlo"*. Pero el valor de tener el nombre **Chaining** en la cabeza es que cuando estés peleando con un prompt gigante, el cerebro recuerda *"ah, esto es un caso de Chaining"* y lo divides en vez de seguir hinchando el prompt.
+
+### Clase 04 - `agentic_workflows_04.txt`
+- **Tema:** cuarto patrón con nombre — **Routing Workflow**.
+- **Idea clave:** cuando distintos inputs requieren **tratamientos distintos**, primero clasificas el input, luego lo mandas al pipeline especializado para esa clase. Es un `switch/case` con Claude como clasificador.
+
+#### Ejemplo del profesor: scripts para video
+Misma app de redes sociales. Pero el tono del script depende del topic:
+- `"programación"` → educacional → tono claro, definiciones, ejemplos didácticos.
+- `"surfing"` → entretenimiento → trendy, hooks, sin definiciones largas.
+
+Mismo prompt monolítico para los dos = scripts mediocres en ambos.
+
+**Solución (Routing)**:
+1. Define N categorías (educacional, entretenimiento, comedia, ...).
+2. Escribe un prompt especializado por categoría.
+3. **Paso 1 (router)**: Claude clasifica el topic en una de las N categorías.
+4. **Paso 2 (specialized handler)**: el topic va al prompt de su categoría.
+
+#### El patrón: Routing
+
+```
+                  ┌→ pipeline educacional
+input → Router ──┼→ pipeline entretenimiento
+                  └→ pipeline comedia
+        (Claude clasifica)   (solo uno corre)
+```
+
+Diferencia con Parallelization: Parallelization corre **todas** las ramas y agrega; Routing corre **solo una**, la que el router eligió.
+
+#### Cuándo usar Routing
+- **Sí**: cuando distintos tipos de input requieren prompts/tools/modelos distintos. Customer support con tickets de billing vs technical vs general. Generación de contenido con tonos distintos. Selector de modelo (queries simples → Haiku, complejas → Opus).
+- **No**: cuando todas las ramas son casi idénticas — una sola variante con condiciones en el prompt es más simple.
+
+#### Mejores prácticas
+- **El router debe devolver una categoría de un set cerrado**: usa tools (Módulo 03 Clase 05) o prefill+stop con enum estricto. *"Devuelve uno de: educacional | entretenimiento | comedia"*. No dejes free-text — un router que devuelve `"como educacional pero con humor"` rompe el switch.
+- **Categoría "default" o "unknown"**: el router puede no saber. Ten una rama de fallback con un prompt genérico — no falles silenciosamente.
+- **Router barato, handlers caros**: Haiku para clasificar, Sonnet/Opus para el handler. Clasificar es trivial; generar bien no.
+- **Los handlers son testeables independientemente**: cada uno se evalúa con su set de inputs propio. Mejorar el handler de "comedia" no afecta a los demás.
+- **Evita explosión de categorías**: 5-7 categorías es manejable; 30 se vuelve ingobernable y los handlers empiezan a parecerse. Si necesitas mucha granularidad, considera 2 niveles de routing (categoría → subcategoría).
+- **Logea qué ruta tomó cada input**: cuando un usuario reporta *"el output salió raro"*, lo primero es ver a qué categoría lo clasificó el router. Si clasificó mal, el problema está ahí, no en el handler.
+- **Routing + Chaining + Parallelization se anidan**: dentro de un handler de "educacional" puedes tener Chaining (research → script) y dentro del paso de research puedes tener Parallelization (3 fuentes en paralelo). Los patrones son LEGOs.
+
+### Clase 05 - `agentic_workflows_05.txt`
+- **Tema:** pivote del módulo — pasamos de **workflows** a **agents**.
+- **Idea clave:** **Workflow** = tú diseñas los pasos. **Agent** = das objetivo + tools, **Claude diseña los pasos**. Lo atractivo: un mismo agente resuelve muchas tareas distintas. El precio: menos predictibilidad.
+
+#### Cuándo elegir agente vs workflow
+| Escenario | Patrón |
+|-----------|--------|
+| Conoces los pasos exactos | Workflow |
+| No conoces los pasos / hay muchas variaciones | Agent |
+
+#### El ejemplo del Módulo 03 revisitado
+3 tools simples: `get_current_datetime`, `add_duration_to_datetime`, `set_reminder`. Claude las combina de formas que **tú no planeaste**:
+
+| Pregunta del usuario | Tools que Claude combina |
+|----------------------|--------------------------|
+| "¿Qué hora es?" | `get_current_datetime` |
+| "¿Qué día será en 11 días?" | `get_current_datetime` → `add_duration_to_datetime` |
+| "Recordatorio gimnasio próximo miércoles" | los 3 encadenados |
+| "¿Cuándo vence mi garantía de 90 días?" | **pregunta al usuario primero** la fecha de compra → `add_duration_to_datetime` |
+
+El último caso es el más importante: **Claude detecta que le falta información y la pide**. Eso es comportamiento de agente, no scripteo.
+
+#### LA LECCIÓN GRANDE: tools abstractos, no especializados
+> *"The set of tools we provide to an agent need to be reasonably abstract."*
+
+**Abstracto** = genérico, propósito amplio. **Especializado** = una tarea específica.
+
+Mira Claude Code (canon de cómo Anthropic diseña agentes):
+
+| ✅ Tools que SÍ tiene (abstractos) | ❌ Tools que NO tiene (especializados) |
+|------------------------------------|----------------------------------------|
+| `Bash` (ejecuta cualquier comando) | `refactor` (refactoriza un archivo) |
+| `WebFetch` (trae cualquier URL) | `install_dependencies` |
+| `Write` (crea cualquier archivo) | `run_tests` |
+| `Read`, `Edit`, ... | `format_code` |
+
+Claude Code **compone** los tools abstractos para refactorizar, instalar deps, formatear — no necesita un tool por tarea. Eso es lo que le da poder.
+
+#### El ejemplo de la app de video
+Para un agente social-media en vez de definir 50 tools (`generate_30s_video`, `generate_60s_video`, `generate_tutorial_video`, ...), defines 4 abstractos:
+- `bash` (con FFmpeg → cualquier manipulación de video).
+- `generate_image`.
+- `text_to_speech`.
+- `post_media`.
+
+Y Claude descubre flujos no planeados:
+- *"crea un video sobre Python"* → genera imágenes → genera audio → ffmpeg combina → postea.
+- *"primero muéstrame una imagen de portada antes del video"* → genera imagen → la muestra → espera tu aprobación → continúa.
+
+El segundo flujo no lo planeaste. Eso es **emergent behavior** de tools bien diseñados.
+
+#### Mejores prácticas
+- **Si te ves creando un tool por cada caso de uso, vas mal**: cuando aparece el quinto tool con nombre como `generate_30s_video`, es señal de que necesitas uno solo más abstracto (`bash` con ffmpeg) y mejor prompting.
+- **El test mental**: *"¿este tool sirve para tareas que no he imaginado todavía?"*. Si la respuesta es sí → abstracto, bien. Si es no → especializado, repiénsalo.
+- **Pero no caigas al extremo opuesto**: dar SOLO `bash` te deja con un agente impredecible y peligroso. Los tools abstractos también deben tener **límites razonables** (Bash con sandbox, WebFetch con timeouts, etc.).
+- **Las descripciones de los tools son críticas en agentes**: en workflows tú decides cuándo llamar cada tool; en agentes Claude decide. La descripción del tool es lo único que tiene Claude para saber qué hace cada uno. Trata las descripciones como API docs (Módulo 03 Clase 03).
+- **Claude pidiendo info al usuario es una señal de buen diseño**: si tu agente se queda bloqueado o alucina inputs en vez de preguntar, falta o está mal redactado un tool — o el system prompt no le dice que puede preguntar.
+- **Predictibilidad ↓, flexibilidad ↑**: agentes son menos predecibles que workflows. Para flujos críticos (compliance, billing, médicos) usa workflows; para asistentes generales y exploratorios usa agentes.
+
+### Clase 06 - `agentic_workflows_06.txt`
+- **Tema:** segundo principio de diseño de agentes — **Environment Inspection** (inspección del entorno).
+- **Idea clave:** un agente **no sabe qué pasó** después de ejecutar una acción. Necesita una forma de **observar** el resultado, casi siempre más allá de lo que devuelve el propio tool. Sin observación, el agente avanza a ciegas y los errores se acumulan.
+
+#### Los 3 ejemplos del profesor
+
+**1. Computer Use** (Módulo 07 Clases 07-08): después de **cada** acción (click, type), llega un **screenshot**. Claude no sabe si un click abrió un menú o navegó — el screenshot es su única forma de saberlo.
+
+**2. Claude Code**: antes de editar un archivo, Claude **lo lee primero**. Obvio, pero el principio es general: *read before write*. No puedes modificar lo que no entiendes.
+
+**3. Agente de video** (caso del módulo): tras generar un video con FFmpeg, ¿cómo sabe Claude que salió bien? Soluciones que el profesor propone:
+- **`whisper.cpp`** vía Bash → extrae captions con timestamps → Claude verifica que el diálogo está en el momento correcto.
+- **FFmpeg para extraer screenshots** cada N segundos → Claude inspecciona los frames y valida que se ve como esperaba.
+
+#### El patrón
+
+```
+[Plan] → [Action] → [Inspect environment] → [Decide next action]
+                          ↑
+                    el paso crítico
+```
+
+#### Por qué importa
+Sin inspección:
+- Claude asume que la acción funcionó → sigue adelante con un estado equivocado.
+- Errores silenciosos se acumulan → al final el output está roto y no sabes dónde.
+- Claude no puede recuperarse de fallos inesperados.
+
+Con inspección:
+- Claude detecta cuando algo no fue como esperaba → reintenta o cambia de estrategia.
+- Errores se localizan donde ocurren.
+- El agente se vuelve robusto a entornos no determinísticos.
+
+#### Mejores prácticas
+- **Las herramientas de inspección son parte del toolset del agente**, no un afterthought: cuando definas tools, piensa explícitamente *"¿cómo verifica Claude el resultado de cada acción?"* y agrega los tools necesarios desde el principio.
+- **El system prompt debe instruir CÓMO inspeccionar**: no basta tener un tool de screenshot — dile al agente *"después de generar un video, extrae screenshots cada 2s con FFmpeg y revísalos"*. Si no, Claude puede no usarlos.
+- **Para outputs no-textuales, convierte a algo que Claude pueda ver**: video → screenshots + transcripción. Audio → waveform + transcripción. Modelo 3D → render PNG (Módulo 08 Clase 01). Datos numéricos → tabla o gráfica. Si Claude no puede *percibirlo*, no puede *verificarlo*.
+- **Read-before-write es regla, no recomendación**: cualquier acción destructiva (editar archivo, modificar DB, sobrescribir blob) debe ir precedida de una lectura del estado actual. Sin esto, Claude sobrescribe ciegamente y rompe cosas.
+- **La inspección cuesta tokens**: cada screenshot, cada read, cada caption es input adicional. Para tareas largas, balancea — no inspecciones cada acción si solo cambian las relevantes.
+- **Distingue inspección "antes" vs "después"**: *"antes"* (read file) le da contexto a Claude para decidir qué hacer; *"después"* (screenshot) verifica que la acción funcionó. Ambas son útiles, pero responden preguntas distintas.
+- **Errores explícitos > silencio**: si un tool falla, devuelve `is_error: true` con detalle (Módulo 03 Clase 02). El silencio es la peor forma de inspección — Claude asume éxito y sigue.
+- **Conexión con Evaluator-Optimizer (Clase 01)**: la inspección post-acción es la "G" del producer-grader. Cuando la inspección detecta fallo, puedes loopear con feedback. Environment inspection es el ladrillo del que está hecho Evaluator-Optimizer.
+
+### Clase 07 - `agentic_workflows_07.txt`
+- **Tema:** cierre del módulo — comparación **workflows vs agents** y la **regla práctica final**.
+- **Idea clave (la tesis del módulo):**
+  > *"Your primary goal as an engineer is to solve problems reliably. Users don't care that you built a fancy agent — they want a product that works 100% of the time. **Always implement workflows where possible, only resort to agents when truly required.**"*
+
+#### Tabla comparativa
+
+| Aspecto | Workflow | Agent |
+|---------|----------|-------|
+| Pasos | Predefinidos por ti | Claude decide |
+| Cuándo usar | Sabes los pasos exactos | No conoces los pasos / muchas variantes |
+| Accuracy | **Mayor** (Claude se enfoca en una cosa por paso) | Menor (más se delega a Claude) |
+| Testeabilidad | **Fácil** (pasos conocidos = casos de eval claros) | Difícil (caminos impredecibles) |
+| Flexibilidad de input | Rígida (input definido) | **Alta** (puede pedirle más al usuario) |
+| Flexibilidad de UX | Limitada | **Rica** (interacciones creativas) |
+| Tasa de éxito | **Alta** | Más baja |
+
+#### El insight pedagógico que cierra el módulo
+Los workflows comparten un patrón común: **dividir una tarea grande en subtareas pequeñas y específicas**. Esa división es la que hace que Claude se enfoque mejor y la calidad suba. **Los 4 patrones del módulo (Evaluator-Optimizer, Parallelization, Chaining, Routing) son distintas formas de dividir.**
+
+Los agentes, en cambio, **no dividen** — delegan la división a Claude. Más flexible, pero más impredecible.
+
+#### Mejores prácticas (las del cierre)
+- **Workflow-first, agent-only-if-needed**: la regla por defecto. Si puedes anticipar los pasos, **siempre** workflow. Resiste la tentación de usar agente porque "se ve más fancy".
+- **Híbrido es legítimo**: el workflow puede tener un step que internamente sea un mini-agente. No es blanco/negro.
+- **Para producción crítica → workflow**: compliance, billing, médico, legal, datos sensibles. La predictibilidad pesa más que la flexibilidad.
+- **Para asistentes generales / exploratorios → agent**: chatbots de uso libre, herramientas para developers, copilots. La flexibilidad es la feature.
+- **Nunca empieces con agente**: arranca con workflow. Si descubres que necesitas más flexibilidad de la que el workflow permite, entonces convierte pasos específicos a sub-agentes. Top-down, no bottom-up.
+- **Los 4 patrones del módulo son tu primer toolkit mental**: cuando veas una tarea nueva, antes de codear, pregúntate *"¿cuál de los 4 patrones aplica?"*. Si ninguno de los 4 aplica directamente, probablemente sea **agente** o una **composición** de patrones.
+- **El nombre te da la checklist**: tener "Routing", "Chaining", "Parallelization", "Evaluator-Optimizer" en la cabeza no escribe código por ti, pero te recuerda **qué piezas debe tener** la implementación: router → handlers; producer → grader → loop; pasos → orden; subtasks → aggregator.
+
+---
+
 ## Takeaways Centrales del Curso
 - **Trata prompts, tools y contexto como un solo sistema.** Un buen prompt con chunks malos falla silenciosamente; un gran chunk sin system prompt también.
 - **Para output confiable, prefiere tools.** Tools > prefill+stop > parsing de texto libre. Cae al siguiente nivel solo cuando el anterior es imposible.
