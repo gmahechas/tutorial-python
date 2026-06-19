@@ -526,6 +526,247 @@ Este módulo cambia de tono: en vez de armar piezas del API tú mismo, examinas 
   - **Permisos antes de autonomía**: por defecto Claude Code pide confirmación antes de comandos shell potencialmente destructivos. Resiste la tentación de ponerlo en modo "yolo" hasta que confíes en el flujo de tu tarea — un `rm -rf` mal disparado no se deshace.
   - **Mismo patrón que tu propio agente**: lo que estás viendo bajo el capó es exactamente el `run_conversation` de Módulo 03 con el `text_edit_tool` (Clase 07) + acceso a shell + cliente MCP. No hay magia nueva — es composición de piezas que ya construiste.
 
+### Clase 03 - `claude_code_03.txt`
+- **Tema:** mindset, memoria persistente (`CLAUDE.md`), y dos workflows de alto rendimiento (plan-first y TDD) para usar Claude Code como un ingeniero más en el equipo, no como un autocomplete glorificado.
+- **Idea clave central:** **Claude Code no es un escritor de código — es un colega ingeniero al que delegas trabajo end-to-end**. El cambio de mindset es: en vez de "ayúdame a escribir esta función", piensa "delégate este ticket". Setup inicial, diseño de features, escritura de código, escritura de tests, deployment, soporte — todo es delegable. El profesor lo demuestra desde el primer paso pidiéndole a Claude que lea el README y ejecute el setup completo (crear venv, activarlo, instalar deps).
+
+#### `/init` y el sistema de memoria persistente (`CLAUDE.md`)
+- `/init` escanea el repo y escribe lo que entendió sobre arquitectura, comandos importantes y coding style en un archivo `CLAUDE.md` (en el transcript dicho como "clod.md").
+- **Ese archivo se incluye automáticamente como contexto en cada sesión futura** — es la memoria de largo plazo de Claude Code para tu proyecto. Sin él, cada sesión empieza desde cero.
+- Puedes pasar directivas especiales al `/init` (p.ej., *"include detailed notes on defining MCP tools"*) para que Claude enfoque la escritura del `CLAUDE.md` en áreas que sabes que vas a necesitar.
+- **Tres niveles de memoria** (los que el transcript llama "project, local, user"):
+  - **Project memory** (`CLAUDE.md` versionado): compartida con todo el equipo. Va al repo, todos lo ven en sus sesiones.
+  - **Local memory** (gitignored): tuya en este proyecto pero no compartida. Útil para preferencias personales que no quieres imponer al equipo.
+  - **User memory**: aplica a todos tus proyectos en esta máquina. Para reglas que sigues siempre (p.ej., "siempre tipa los argumentos de funciones").
+- **Atajo `#`**: si escribes `#` seguido de una nota dentro de Claude Code, te pregunta a cuál de las tres memorias agregarla y la appendea. Forma rápida de capturar reglas sin salir del flujo.
+- Re-correr `/init` actualiza el `CLAUDE.md` cuando el proyecto evoluciona (nuevos comandos, nuevo coding style). También puedes editarlo a mano cuando sea trivial.
+
+#### Git delegado
+- Después de generar `CLAUDE.md`, el profesor delega *"stage y commit todos los cambios"* a Claude Code. Claude inspecciona el diff, escribe un mensaje descriptivo, y commitea — el humano no toca git.
+
+#### Filosofía: "effort multiplier"
+- Frase central del profesor: **"Claude Code es un effort multiplier. Pones poco esfuerzo, sale algo decente. Pones esfuerzo en cómo lo diriges, sale dramáticamente mejor."**
+- Pedir *"haz una tool de Word/PDF a Markdown"* funciona — pero los dos workflows que siguen funcionan **mucho** mejor con solo unos minutos extra.
+
+#### Workflow #1: Plan-first (3 pasos)
+1. **Aterriza contexto**: identifica tú mismo los archivos relevantes y pídele a Claude que los lea (en el demo: `tools/math.py` para que vea cómo está armado un tool existente, `document.py` para que conozca `binary_document_to_markdown`).
+2. **Pídele un plan, NO código**: describe la feature y di explícitamente *"plan it out, don't write code yet"*. Claude devuelve pasos detallados.
+3. **Pídele que implemente el plan**: Claude ejecuta los pasos. En el demo: actualizó `document.py`, actualizó `main.py`, escribió tests, los corrió, **y agregó manejo de errores para archivos inexistentes / no soportados que el profesor ni siquiera pidió** — un buen plan deja a Claude espacio para hacer el trabajo bien.
+
+#### Workflow #2: Test-Driven Development (TDD) con Claude
+1. **`/clear`** — limpia la conversación. Crítico aquí porque el profesor está re-haciendo la misma feature; sin `/clear` Claude "copiaría" su solución anterior y el demo no probaría nada.
+2. **Aterriza contexto** otra vez (los mismos archivos relevantes).
+3. **Pídele tests, NO código**: *"qué tests podrías escribir para esta feature, no escribas código todavía"*. Claude propone una lista (en el demo: 8 tests).
+4. **Selecciona los tests relevantes**: el profesor pide implementar tests 1-5 y descarta los más especializados. **Filtras tú, Claude no decide qué cubrir.**
+5. **Pídele código que pase los tests**: Claude escribe la implementación iterando hasta que los tests pasan.
+- TDD requiere más esfuerzo upfront (revisar tests propuestos) pero deja un suite ejecutable como red de seguridad — el código que sale ya tiene cobertura, no es un "trust me" del LLM.
+
+#### Trucos del profesor
+- **`git stash` para retry**: cuando quieres comparar dos enfoques sobre la misma feature, stashea los cambios de Claude del primer intento, vuelves a clean slate, y pruebas el segundo workflow.
+- **`/clear` antes de cualquier task que no debe heredar contexto previo**: cuando arrancas una feature nueva no relacionada, cuando estás probando enfoques alternativos, o cuando notas que Claude se está "anclando" a una conversación previa que ya no aplica.
+
+#### Mejores prácticas
+- **Trata cada sesión como una colaboración con un ingeniero junior brillante pero amnésico**: brillante porque puede leer todo el repo y planear features completas; amnésico porque cada `/clear` reinicia su memoria. La memoria estable vive en `CLAUDE.md`, no en la conversación.
+- **`CLAUDE.md` es un documento vivo, no autogenerado y olvidado**: trátalo como cualquier doc de onboarding del proyecto. Cuando agregues un nuevo comando, una nueva convención, o una decisión de arquitectura, anótalo (con `#` o editando directo).
+- **No mezcles project memory con preferencias personales**: si quieres que Claude siempre te ponga emojis en commits pero el equipo no, eso va a **user memory** o **local memory** — no a project memory commiteada.
+- **Plan-first es el default; TDD es para código crítico**: para features pequeñas o exploratorias, el workflow de 3 pasos (read → plan → implement) es suficiente. Para código en hot path (auth, billing, datos sensibles), el TDD justifica el overhead — los tests son la red real.
+- **Identifica los archivos relevantes tú mismo, no le delegues eso a Claude al inicio**: tú sabes qué archivos son relevantes para una feature mejor que un grep. Decirle *"lee `document.py` y `tools/math.py`"* es 100× más confiable que *"busca lo que sea relevante en el repo"*.
+- **Pedir un plan antes del código no es solo para Claude — también es para ti**: revisar el plan te obliga a pensar la feature antes de que el código exista. Si el plan está mal, lo corriges en 30 segundos; si lo descubres en el código ya escrito, son 10 minutos de retrabajo.
+- **El truco de "describe la feature, di NO escribas código"** funciona porque Claude por defecto tiende a saltar a implementar. La instrucción explícita lo frena en seco y separa fases que en su cabeza están fundidas.
+- **Cuando Claude agregue cosas que no pediste pero son razonables (manejo de errores, validaciones, tests adicionales), revísalas en vez de borrarlas**: Claude Code está calibrado para "lo que un ingeniero senior haría" — sus extras suelen ser correctos. Si no lo son, ese es feedback para ajustar el `CLAUDE.md`.
+- **Combina el `CLAUDE.md` con prompt caching**: igual que cualquier prefijo estable largo, `CLAUDE.md` es candidato natural a cache (Módulo 04 Clase 05). Claude Code lo maneja internamente, pero recordar el principio importa cuando construyas tu propio agente.
+
+### Clase 04 - `claude_code_04.txt`
+- **Tema:** Claude Code como **cliente MCP**: conectar servidores MCP para expandir dinámicamente sus capacidades sin tocar el binario.
+- **Idea clave:** Claude Code lleva un **cliente MCP embebido** (Módulo 05). Cualquier servidor MCP que registres pasa a formar parte de su toolset junto con los tools nativos (read/edit/shell). Esto convierte a Claude Code en una **plataforma extensible**: tu propio dominio (errores de prod, tickets, mensajería de equipo) se vuelve parte del flujo de codear sin que tengas que modificar Claude Code en sí.
+- **Demo del profesor:** conecta Claude Code al mismo MCP server que construyó en clases previas (el que expone `document_path_to_markdown`). Una vez conectado, le pide a Claude Code *"convierte el contenido de este Word/PDF a Markdown"* — y Claude Code automáticamente descubre el tool nuevo y lo usa.
+- **Setup en 3 pasos** (los del transcript):
+  1. **Sal de la sesión activa** con `Ctrl+C` (no puedes registrar mientras `claude` corre).
+  2. **Registra el server**: `claude mcp add` → te pide un nombre libre (en el demo: `Documents`) → te pide el comando que arranca el server (en el demo: `uv run main.py`).
+  3. **Reinicia Claude Code** con `claude`. El nuevo tool ya aparece en su lista junto con los tools nativos.
+- **Casos de uso sugeridos por el profesor** (estos definen para qué *vale la pena* registrar un MCP server):
+  - **Sentry MCP**: Claude Code consulta detalles de errores de producción mientras debuggeas → no tienes que copiar stack traces a mano.
+  - **Jira MCP**: Claude Code lee el ticket que estás trabajando → entiende el "por qué" de la feature, no solo el "qué".
+  - **Slack MCP**: Claude Code te notifica cuando termina una tarea larga → no tienes que babysittear la terminal.
+- **Mejores prácticas:**
+  - **Nombre del MCP server** = identificador local; ponlo descriptivo (`Documents`, `Sentry`, `Jira-Acme`) porque vas a verlo en `/help` y en logs cuando algo falle.
+  - **El comando de arranque debe poder correr sin estado del cwd actual**: si registras `uv run main.py`, Claude Code lo va a invocar desde donde sea que tú estés. Usa paths absolutos en el comando si el server depende de archivos específicos, o cd dentro del comando.
+  - **Registra una vez, usa siempre**: `claude mcp add` persiste el registro. No tienes que volver a configurarlo en cada sesión — pero sí tienes que **reiniciar `claude`** después de agregar/quitar servers para que recargue.
+  - **Valida con MCP Inspector primero** (Módulo 05 Clase 04): si `claude` no ve tu tool, antes de blame Claude Code, conecta Inspector al server y confirma que `list_tools` lo expone correctamente.
+  - **Empieza con un MCP "documental" antes que uno "ejecutor"**: Sentry/Jira (read-only) son apuestas seguras para tu primer MCP en Claude Code. Slack (write) y deploys requieren más cuidado con permisos — agrégalos cuando ya confíes en el flujo.
+  - **MCPs personales vs del equipo**: registros de `claude mcp add` por defecto son tuyos. Si tu equipo se va a beneficiar del mismo set de MCPs, documenta los comandos de registro en el README del proyecto (o en el `CLAUDE.md`) para que cada miembro corra los mismos.
+  - **Combina con el patrón "delegar tickets" de la Clase 03**: con Jira MCP + Sentry MCP + el repo + Slack MCP en una sesión, Claude Code puede leer un ticket → consultar el error en Sentry → escribir el fix → correr tests → commitear → mensajearte por Slack cuando termina. Eso es agente productivo, no demo de tutorial.
+  - **Trata MCP servers como un toolkit extensible, no como un add-on**: la diferencia entre "Claude Code que escribe código" y "Claude Code que opera tu workflow" son los MCPs que enchufes. Esa es la palanca de mayor ROI del módulo.
+  - **Cuidado con `Ctrl+C` para salir**: el transcript menciona que el profesor termina la sesión con `Ctrl+C` antes de registrar — confirma que no estás en medio de una tarea destructiva (el agente puede estar a media operación de archivos).
+
+### Clase 05 - `claude_code_05.txt`
+- **Tema:** **paralelismo con git worktrees + custom slash commands** — comandar varios Claude Codes a la vez como un equipo de ingenieros virtuales, sin que se pisen los archivos entre ellos.
+- **Idea clave:** Claude Code es un proceso ligero — puedes correr **N instancias en paralelo**, cada una atacando un ticket distinto. El cuello de botella deja de ser cuán rápido escribe Claude y pasa a ser cuántas branches puedes revisar al mismo tiempo. La frase del profesor: *"un solo developer comandando su propio equipo de ingenieros virtuales"*.
+- **El problema (race condition de archivos):** dos instancias de Claude editando el mismo archivo al mismo tiempo escriben código conflictivo o inválido — ninguna sabe de la otra. La solución no es coordinación entre Claudes (imposible, son procesos independientes), es **aislarlos físicamente**: cada uno en su propio workspace.
+
+#### Git worktrees como primitive de aislamiento
+- `git worktree` permite tener **una copia completa del repo en un directorio separado, en su propia branch**. Es como branching pero con árbol de archivos físico, no solo lógico.
+- Cada worktree → su propio Claude Code → su propia feature → no se pisan.
+- Cuando una feature está lista, se commitea en su branch y se mergea a `main` como cualquier branch normal.
+- En el demo: el profesor crea `trees/feature_A`, `trees/feature_B`, etc. — un subdirectorio por feature.
+
+#### Delegar la creación del worktree a Claude
+- Crear un worktree a mano es repetitivo (`git worktree add`, symlinkear venv/`.env`, abrir editor). El profesor delega ese flujo a Claude Code mismo con un prompt:
+  *"crea un worktree en `trees/feature_A`, symlinkea las dependencias que no están en git, y abre el editor en ese directorio"*.
+- **Por qué symlink y no copy de las dependencias**: los archivos no versionados (venv, `.env`, `node_modules`) no se copian al worktree. Symlinkearlos hace que cada Claude vea el mismo entorno sin duplicar gigabytes ni perder las API keys.
+
+#### Custom slash commands (`.claude/commands/*.md`)
+- Repetir el prompt del worktree cada vez es tedioso. Claude Code soporta **comandos personalizados** definidos como archivos Markdown:
+  - Crea `.claude/commands/create_worktree.md` en tu repo.
+  - Pega el prompt completo dentro.
+  - Reinicia `claude`.
+  - Ahora puedes invocar `/project:create_worktree` desde cualquier sesión.
+- **Argumentos dinámicos con `$ARGUMENTS`**: reemplaza la parte hardcoded del prompt (p.ej., `feature_A`) por el placeholder literal `$ARGUMENTS` (mayúsculas, exacto). Al ejecutar `/project:create_worktree feature_B`, Claude Code sustituye `$ARGUMENTS` por `feature_B`.
+- El nombre del archivo (`create_worktree.md`) define el nombre del comando (`/project:create_worktree`).
+- **Versionado del slash command**: como vive en `.claude/commands/`, el archivo va al repo — todo el equipo recibe el mismo comando al pull.
+
+#### Demo del flujo paralelo completo
+1. El profesor corre `/project:create_worktree` cuatro veces, una por feature: tests de documentos, logging, dos tools nuevos, una tool de subtract.
+2. Termina con cuatro editores abiertos, cada uno con su Claude Code corriendo, cada uno trabajando una feature distinta en paralelo.
+3. Cuando cada Claude termina, le pide *"commitea los cambios"* en su worktree.
+4. Para mergear, define **otro custom command** `/project:merge_worktree` cuyo prompt es: *"ve al worktree X, mira el último commit para entender qué se hizo, e intenta mergearlo a main"*.
+5. Lo corre cuatro veces. **Cuando hay conflicto en el merge de subtract, Claude Code resuelve el conflicto automáticamente** — no por magia sino porque tiene el contexto del commit y puede inspeccionar el conflicto.
+6. Cleanup: pide a Claude que borre los worktrees al final.
+
+#### Mejores prácticas
+- **Tu cuello de botella es el review, no la generación**: 4 Claudes en paralelo son geniales si puedes revisar 4 PRs decentemente. Si terminas mergeando código sin leer porque "Claude lo escribió", estás auto-introduciendo bugs a velocidad 4×. Empieza con 2 instancias en paralelo y sube cuando confíes en tu velocidad de review.
+- **Una feature = una worktree = una branch**: mantén el mapping 1:1. Worktrees compartidos entre tareas re-introducen el problema que estabas resolviendo.
+- **Symlinkea, no copies, los archivos no versionados**: venvs y `.env` son grandes y/o sensibles. Symlinks comparten el mismo archivo físico — un cambio en un worktree se refleja en todos. Si necesitas entornos *aislados* (p.ej., diferente versión de Python), entonces sí copias o creas venvs nuevos.
+- **`.claude/commands/*.md` es el mecanismo de "playbook compartido"**: cualquier flujo que tu equipo ejecuta más de dos veces (crear worktree, mergear, deploy a staging, generar release notes) es candidato a custom command. El equipo entero los hereda al hacer pull.
+- **`$ARGUMENTS` es literal y único**: el placeholder es exactamente `$ARGUMENTS` (en mayúsculas). Si necesitas múltiples argumentos posicionales, parsea dentro del prompt (*"el primer argumento es la feature, el segundo es la branch base"*) — Claude Code te da una sola string.
+- **Reinicia `claude` después de agregar/editar commands**: igual que con MCP servers, los commands se cargan al arranque. Ediciones en caliente no se ven sin restart.
+- **No auto-mergees ramas críticas**: que Claude pueda resolver conflictos no significa que deba hacerlo en `main` de producción sin review. Para hot paths (auth, billing, schemas de DB), el merge sigue siendo manual aunque la branch venga de un worktree de Claude.
+- **Convención de nombres de worktrees**: el profesor usa `trees/feature_A`. Mantén una convención (`trees/`, `worktrees/`, `wt/`) y agrégala a `.gitignore` para no commitear accidentalmente metadata local. Git ya ignora subworktrees, pero los archivos symlinkeados pueden filtrarse según cómo los crees.
+- **Limpia worktrees al terminar**: `git worktree list` muestra todos los activos; `git worktree remove <path>` los borra cuando ya no se necesitan. Worktrees viejos sin limpiar acumulan disk y confunden al equipo.
+- **Combina con el "delegar tickets" de Clase 03 + MCPs de Clase 04**: el endgame del módulo es: cliente Jira lee 4 tickets → un script crea 4 worktrees con `/project:create_worktree` → cada Claude resuelve su ticket → custom command mergea → Slack te avisa. Eso ya no es "usar Claude Code", es **operar un equipo virtual con un comando**.
+- **El patrón generaliza más allá de Claude Code**: la idea de "aislar workspace por agente paralelo" aplica a cualquier sistema multi-agente que toque archivos compartidos. Worktrees es la implementación específica para agentes-de-código; para agentes-de-data podrías usar databases temporales o branches de S3.
+
+### Clase 06 - `claude_code_06.txt`
+- **Tema:** **Claude Code en CI/CD** — correr Claude Code de forma no-interactiva en GitHub Actions para monitorear logs de producción, detectar errores, escribir el fix y abrir el PR automáticamente.
+- **Idea clave:** Claude Code no tiene que vivir solo en tu terminal. Es un binario que se instala con `npm`, así que puedes meterlo dentro de un GitHub Action y darle un prompt como input. Lo que cambia respecto al uso interactivo es que ahora Claude **arranca con una directiva, ejecuta hasta cumplirla, abre PR y termina** — no espera que un humano se siente a teclear. Eso convierte el patrón "Claude como ingeniero virtual" (Clases 03–05) en algo que corre 24/7 sin que estés ahí.
+- **Demo del profesor:** Una app chatbot que funciona en local pero falla en producción (AWS Amplify). Local responde *"1+1 = 2"* y genera un spreadsheet con data fake; producción genera el mismo spreadsheet **vacío**. La causa real (vista en CloudWatch): *"the provided model identifier is invalid"* — un typo en el ID del modelo que solo se usa en el env de producción. El engineer podría haberlo encontrado a mano, pero el demo muestra Claude haciéndolo solo:
+  1. GitHub Action programado para correr **temprano cada mañana** (`cron`).
+  2. Action hace checkout del repo, instala dependencias, **instala Claude Code y AWS CLI**.
+  3. Pasa un prompt a Claude: *"consulta CloudWatch, trae los errores de las últimas 24 h, dedup y trúncalos a una cantidad manejable, e intenta corregir cada uno"*.
+  4. Claude itera errores, escribe los fixes, **commitea**, **abre un Pull Request**.
+  5. El engineer despierta y encuentra un PR con: descripción del problema en lenguaje claro + diff con el fix. Solo revisa y mergea.
+- **Por qué funciona** (la sutileza pedagógica que el profesor nombra al final):
+  - Claude Code es **flexible**: no es una app, es un comando. Cualquier flujo que un humano haría con él puede empaquetarse como prompt + script.
+  - El **PR como output** es el control de seguridad: Claude no toca producción, solo propone cambios que pasan por el code review normal del equipo.
+  - El humano sigue siendo el aprobador final — Claude reduce el time-to-fix-proposal, no salta el gate de calidad.
+- **Mejores prácticas:**
+  - **Dedup + truncate de logs antes de pasarlos al modelo**: CloudWatch puede escupir miles de líneas idénticas (mismo error N veces). Métete el dedup en el prompt o pre-procesa con `awk`/`jq` antes — pasarle 10k errores idénticos a Claude no ayuda y consume context window. El profesor lo nombra explícitamente como parte del prompt.
+  - **Programa el job en ventana de baja actividad**: el demo lo corre **temprano en la mañana**. Razón: si abres PRs durante el horario laboral, compiten con el trabajo activo del equipo y el reviewer no está fresco. Tener el PR listo *antes* del standup cambia la dinámica.
+  - **Cap de errores por iteración**: Claude tiene un context window finito. Si tu app genera 200 errores únicos al día, no se los mandes todos; toma top-N por frecuencia o por severidad. Mejor 5 fixes correctos que 50 fixes confusos.
+  - **PR, nunca auto-commit a `main`**: el demo abre un PR — copia ese patrón. **No le des permiso de merge**, ni siquiera para fixes "obvios". El branch + PR + review + merge es la separación de poderes que te salva cuando Claude tiene un mal día.
+  - **API keys en GitHub Actions Secrets**: la key de Anthropic, credenciales AWS, cualquier token va en `Settings → Secrets and variables → Actions`, nunca hardcodeado en el workflow. El job lee `${{ secrets.ANTHROPIC_API_KEY }}`, etc.
+  - **Permisos mínimos para el bot de PR**: si Claude abre PRs como un user dedicado (recomendado vs. tu propia identidad), dale solo permisos de `contents: write` + `pull-requests: write`. No le des `admin`, ni `deployments`, ni acceso a otros repos.
+  - **Vincula el flujo a tu observability stack actual**: el demo usa CloudWatch porque la app está en AWS. Si usas Sentry, Datadog, GCP Logging, Honeycomb — el patrón es idéntico, solo cambia el CLI/SDK que el job invoque para traer logs. Combina con el MCP server de Sentry de la Clase 04 si prefieres no instalar CLIs.
+  - **Limita el costo del job**: cada corrida es 1+ llamadas a Claude. Pon `timeout-minutes` en el step de GitHub Actions. Si el job se desboca (loop infinito de fixes), el límite te corta antes de quemar el presupuesto.
+  - **No esperes que Claude arregle bugs de infra/config**: Claude solo ve el código del repo. Si el error es por un IAM role mal configurado, una env var faltante en el deploy, o una versión de runtime distinta — Claude va a *parecer* que arregla algo (puede tocar variables) pero no resuelve la causa raíz. El patrón funciona mejor para bugs que viven en el código (typos, edge cases, validaciones faltantes).
+  - **El PR debe explicarse solo**: pídele a Claude en el prompt que el PR description incluya: el error original con stack trace, la causa raíz que detectó, el fix aplicado, y por qué ese fix es correcto. Sin eso, el reviewer tiene que reconstruir el razonamiento — y termina haciendo el debug que Claude ya hizo.
+  - **El patrón generaliza a "agente de mantenimiento"**: misma idea aplica a cron jobs que actualicen dependencias (`npm audit fix` + tests + PR), corran linters fix-mode, completen TODOs marcados, traigan changelog summaries. Una vez que tienes la plomería de "Claude Code en CI", agregar más jobs es solo escribir más prompts.
+  - **Cierra el loop de oncall**: este patrón cambia el SLO de "humano oncall responde en 15 min" a "Claude tiene un PR listo para cuando el humano abra el laptop". No reemplaza al oncall para incidentes graves (que requieren rollback inmediato), pero sí baja el ruido de bugs no-críticos que tradicionalmente se acumulan en el backlog.
+  - **Mide el hit rate**: rastrea qué fracción de PRs autogenerados son útiles (mergeados sin cambios), parcialmente útiles (mergeados con tweaks), o descartados. Si <30% mergean limpios, ajusta el prompt o los criterios de error que recibe — el job está produciendo más ruido que valor.
+
+### Clase 07 - `claude_code_07.txt`
+- **Tema:** intro a **Computer Use** — Claude operando una computadora con mouse/teclado/screenshots dentro de un container Docker aislado, demostrado como un caso de uso de **QA testing automatizado** sobre una UI con bugs.
+- **Idea clave:** Computer Use es la **otra cara del agente** del módulo. Mientras Claude Code te da un agente que opera sobre **archivos y shell** (un dominio textual y deterministra), Computer Use te da un agente que opera sobre **píxeles, cursor y eventos de teclado** (un dominio visual e impreciso). Mismo loop subyacente del Módulo 03, distinto set de tools. El cambio mental: pasar de *"Claude lee y edita código"* a *"Claude usa una app como un humano"*.
+- **El problema del demo:** una app web pequeña con un text area que soporta menciones con `@` (estilo `@usuario`). Funciona bien al primer vistazo, pero tiene un bug *jankoso*: si agregas dos menciones y luego presionas backspace, aparece un popup en la **esquina superior izquierda** de la pantalla en vez de debajo del cursor. Encontrar y reproducir bugs visuales así a mano es lento y aburrido. Aquí entra Computer Use.
+- **Setup que el profesor muestra (será replicado en clase próxima):**
+  - **Lado derecho**: un browser corriendo **dentro de un container Docker** — el sandbox visual. El browser está totalmente aislado del sistema host: si Claude hace algo raro, no toca tu máquina real.
+  - **Lado izquierdo**: un chat interface donde le das instrucciones a Claude. Claude lee, decide qué acción ejecutar (click, type, screenshot), la ejecuta dentro del container, observa el resultado, y vuelve a decidir.
+- **El prompt (estructura QA):** el profesor le manda a Claude un prompt grande con cuatro partes:
+  1. **Setup**: *"vas a hacer QA testing sobre un React component en `<URL>`"*.
+  2. **Proceso de testing**: pasos generales que Claude debe seguir.
+  3. **Test cases concretos**: tres tests específicos:
+     - Verificar que las opciones de autocompletado aparezcan al teclear `@`.
+     - Verificar que `Enter` inserte la mención.
+     - Verificar que `Backspace` muestre las opciones **debajo de la mención**, no en la esquina superior izquierda.
+  4. **Output esperado**: *"al final, escribe un reporte conciso con los resultados de cada test"*.
+- **Resultado del demo:** Tests 1 y 2 pasan ✓. Test 3 **falla** ✗ — exactamente el bug que el profesor quería que detectara. Claude reporta el fallo claramente, dándole al engineer la pista para investigar a mano.
+- **Por qué Computer Use existe** (la sutileza pedagógica):
+  - Hay tareas que **no se pueden script-ear fácilmente**: QA en UI complejas, aceptación de flujos multi-paso, accessibility audits, llenar formularios en apps que no exponen API, validar dashboards visuales, comparar layouts entre browsers. Selenium/Playwright cubren parte, pero requieren código por test y se rompen con cada cambio de DOM.
+  - Computer Use no se basa en selectores de DOM — **basa sus decisiones en lo que ve en la pantalla**, igual que un humano. Es robusto a refactors visuales que romperían un test de Playwright, pero más caro y menos preciso.
+- **Mejores prácticas:**
+  - **Estructura el prompt como un test plan, no como una conversación**: el prompt del demo es esencialmente un test plan formal: setup + steps + expected outcomes + report format. Aplica los mismos principios del Módulo 04 Clase 02 (vision): checklist numerada > pregunta abierta. *"Haz QA"* da output vago; *"corre estos 3 tests específicos y reporta pass/fail"* da output calificable.
+  - **Sandboxea siempre con Docker** (o equivalente): Computer Use **opera teclado y mouse reales** desde el punto de vista del proceso. Si lo corres en tu desktop sin sandbox, un mal click puede borrar archivos, mandar mensajes, ejecutar comandos en ventanas abiertas. Docker container con su propio display virtual = aislamiento físico real, no solo lógico.
+  - **No mezcles Computer Use y Claude Code para la misma tarea sin pensarlo**: si la tarea es *modificar código*, Claude Code es más rápido y barato. Si la tarea es *interactuar con una UI ya construida*, Computer Use. Hacer QA con Claude Code (corriendo Playwright) puede ser más barato si tu UI tiene tests automatizables; usar Computer Use solo cuando los tests visuales-humanos sean genuinamente necesarios.
+  - **Cada acción cuesta tiempo y tokens**: cada ciclo de Computer Use es screenshot → modelo razona → decide acción → ejecuta → nuevo screenshot. Una sesión de 20 acciones es 20 screenshots en context window. Diseña tareas acotadas (3–10 acciones idealmente) y termínalas con un reporte explícito para no acumular history innecesario.
+  - **El reporte conciso al final es crítico**: sin la instrucción explícita *"escribe un reporte conciso al final"*, te quedas con la transcripción cruda de acciones de Claude — útil para debug, malo para ver el resultado. El reporte es tu test report, **escríbelo en el prompt como requisito**.
+  - **Espera resultados imperfectos**: en el demo, Claude reportó test 3 como "failed" — eso es la feature funcionando, no un fracaso. El valor no es que Claude arregle el bug, es que **lo encuentre y lo describa** sin que un humano tenga que reproducirlo. Que Computer Use te diga *"test 3 falló porque el popup apareció arriba a la izquierda"* es exactamente el ahorro.
+  - **Diseña tests reproducibles**: igual que con cualquier eval (Módulo 02), un test de Computer Use que ejecutas hoy y mañana debería dar el mismo resultado modulo flakes visuales. Si tus tests dependen de timestamps, datos aleatorios o estado entre corridas, vas a tener falsos positivos/negativos. Inicializa la app a un estado conocido antes de cada batch.
+  - **Usa Computer Use para regresión visual sobre tu propio producto**: cuando un cliente reporta *"la dropdown se ve raro en Safari mobile"*, en vez de reproducir a mano, le pasas el repro steps a Computer Use y dejas que valide la fix antes de mergear. El costo de una corrida vs. el costo de un round-trip humano-cliente justifica la inversión.
+  - **No es un reemplazo de QA humano para producto crítico**: Computer Use es genial para regresiones, smoke tests y exploraciones — no para validar UX nueva donde el juicio "esto se siente raro" es el output deseado. Trátalo como un tester junior incansable, no como un product manager.
+  - **Combinación con MCP servers (Clase 04)**: si tu MCP server expone *"abre un ticket de QA en Jira con el reporte"*, Computer Use puede correr el test, generar el report, y abrir el ticket de un solo viaje. Mismo patrón compositional que cierra el endgame del módulo.
+  - **El bug del demo es deliberadamente UI-only**: el profesor eligió un bug que **solo se manifiesta visualmente** (popup en la esquina equivocada) — exactamente el tipo de cosas que tests unitarios de JS no atrapan. Esa es la zona donde Computer Use brilla: bugs que requieren ojos, no asserts.
+
+### Clase 08 - `claude_code_08.txt`
+- **Tema:** **cómo funciona Computer Use por debajo** — la revelación de que **no es un API nuevo**, es exactamente el mismo tool-use loop del Módulo 03 con un schema especial. Más cómo arrancar usando la reference implementation oficial de Anthropic.
+- **Idea clave (la sutileza pedagógica que cierra el módulo):** **Computer Use está implementado *encima* del sistema de tools que ya conoces.** El profesor lo dice explícito: *"computer use itself is actually implemented with this exact same tool system"*. No hay magia oculta. El loop es idéntico al de `getWeather` del Módulo 03 Clase 01:
+  1. Mandas un request con un schema especial.
+  2. Claude responde con un `tool_use` part (id, name, input).
+  3. **Tú** ejecutas la acción en tu entorno.
+  4. Mandas el resultado de vuelta como `tool_result`.
+  5. Repetir hasta `stop_reason != "tool_use"`.
+- **El truco del schema "pequeño → grande":** lo que el profesor llama una característica importante de Computer Use:
+  - Tú declaras un schema **pequeño** del lado del cliente (apenas el tipo de tool — algo como `{"type": "computer_20250124", "name": "computer", "display_width_px": ..., "display_height_px": ...}`).
+  - Anthropic, **del lado del servidor, lo expande** internamente a un schema gigante que le dice a Claude que el tool `action` acepta argumentos como `mouse_move`, `left_click`, `screenshot`, `right_click`, `key`, `type`, `cursor_position`, etc.
+  - Claude solo ve el schema expandido. Tú no tienes que escribir esa lista enorme de acciones — Anthropic la mantiene actualizada y tú solo declaras la versión.
+  - Mismo patrón que `str_replace_based_edit_tool` (Módulo 03 Clase 07) y `web_search_20250305` (Módulo 03 Clase 08): **schemas pre-definidos versionados que Claude entiende nativamente**.
+- **El "computing environment" lo provees tú:** Claude no toca tu computadora directamente — solo emite acciones. Es **tu código** el que recibe `{"action": "left_click", "coordinate": [400, 300]}` y se encarga de:
+  - Mover el cursor del display virtual a (400, 300).
+  - Disparar el evento de click.
+  - Tomar un screenshot del nuevo estado.
+  - Mandarlo de vuelta como `tool_result` con la imagen base64.
+- **Cómo ejecutas las acciones reales:** un Docker container que corre:
+  - Un display virtual (X11/Xvfb).
+  - Un browser u otra app.
+  - Un programa que recibe los `tool_use` blocks y los traduce a llamadas reales del sistema (`xdotool`, `pyautogui`, etc.).
+  - Devuelve screenshots como bytes.
+- **Reference implementation oficial de Anthropic:**
+  - Docker container ya armado con todo el plomería: el display, el ejecutor de acciones, el bridge con Claude.
+  - Setup mínimo: instala Docker → corre un comando → tienes la misma UI del demo de la Clase 07 (chat a la izquierda, browser a la derecha).
+  - **Comando exacto del transcript** (imagen `ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest`):
+    ```bash
+    export ANTHROPIC_API_KEY="your api key"
+    docker run \
+        -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+        -v $HOME/.anthropic:/home/computeruse/.anthropic \
+        -p 5900:5900 \
+        -p 8501:8501 \
+        -p 6080:6080 \
+        -p 8080:8080 \
+        -it ghcr.io/anthropics/anthropic-quickstarts:computer-use-demo-latest
+    ```
+  - **Anatomía del comando** (vale la pena entender qué hace cada flag, no solo copy-pegar):
+    - `export ANTHROPIC_API_KEY="..."` → tu API key se exporta como env var del shell. **No la hardcodees** en el comando.
+    - `-e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY` → pasa la env var del host **al container**. Sin esto, el container no puede llamar a la API.
+    - `-v $HOME/.anthropic:/home/computeruse/.anthropic` → **bind mount**: comparte el directorio `~/.anthropic` del host con el container. Persiste settings/cache entre runs (no tienes que re-loguearte cada vez que reinicias).
+    - `-p 5900:5900` → VNC server (acceso directo al display virtual con un cliente VNC).
+    - `-p 8501:8501` → Streamlit UI (el chat con Claude del lado izquierdo de la demo).
+    - `-p 6080:6080` → noVNC (cliente VNC en el browser — abrir `http://localhost:6080` te da el desktop sin instalar app extra).
+    - `-p 8080:8080` → la UI combinada (chat + desktop en una sola página, lo más usual).
+    - `-it` → modo interactivo con TTY → ves los logs en vivo y puedes hacer `Ctrl+C` para parar.
+    - `ghcr.io/anthropics/...:computer-use-demo-latest` → imagen oficial de Anthropic en GitHub Container Registry, tag `latest`.
+  - Una vez corriendo, abrir `http://localhost:8080` en el browser → ahí está la UI completa (chat + browser virtual).
+  - Link en docs de Anthropic — checa antes de escribir tu propio executor.
+- **Mejores prácticas:**
+  - **Usa la reference implementation antes de armar la tuya**: ahorrarte semanas de plomería de display virtual y action executor. Empiezas productivo en 10 minutos. Cuando ya entiendes el flujo y necesitas customizar (otra arquitectura de container, otra app además de browser, integración con tus secrets), entonces forkeas.
+  - **El loop de Módulo 03 sigue siendo el ground truth**: si Computer Use se comporta raro, la primera hipótesis no debería ser *"es un bug en Computer Use"*, debería ser *"se rompió el contrato de tool_use ↔ tool_result"*. Logea los `tool_use` blocks que llegan y los `tool_result` que mandas — el debug es idéntico al de Módulo 03 Clase 02.
+  - **`is_error: true` también aplica aquí**: si la acción falla (la app crasheó, el coordinate está fuera de pantalla, el browser se congeló), devuelve `tool_result` con `is_error: true` y un mensaje. Claude puede decidir reintentar, tomar otro screenshot, o reportar el fallo. El mismo patrón de recovery del Módulo 03 Clase 02.
+  - **El schema versioned (`computer_20250124` y similares) cambia con el tiempo**: revisa la versión que estás declarando contra la última en docs. Versiones nuevas agregan acciones (scroll, drag, doble-click); versiones viejas funcionan pero pierden capacidades.
+  - **Cada screenshot es una imagen en context window** (Módulo 04 Clase 02 aplica): los screenshots son grandes en tokens. Sesiones largas con muchos screenshots inflan el context rápido — limita la profundidad de la tarea o trunca screenshots viejos cuando el modelo ya no los necesite.
+  - **Mismo principio de prompt caching (Módulo 04 Clase 05)**: el system prompt + el schema expandido + las instrucciones iniciales son prefijo estable → cachéalo. Solo los screenshots cambian de turno a turno.
+  - **El "small schema → big schema" es el patrón general de Anthropic**: text editor, web search, code execution, computer use — todos son casos del mismo patrón. Cuando Anthropic anuncia un tool nuevo, la pregunta no es *"¿cómo lo uso?"*, sino *"¿cuál es el `type` que declaro y qué versión?"*. Lee el changelog de tools como leerías un changelog de cualquier API.
+  - **No mezcles Computer Use con tools custom propios sin pensarlo**: técnicamente puedes tener `computer` + `get_user_preferences` + `read_database` en la misma request. Funciona, pero el modelo a veces se confunde de cuál tool usar para qué. Empieza con solo `computer` y agrega tools propios cuando entiendas el flujo.
+  - **El insight pedagógico del módulo cierra aquí**: Claude Code (Clases 02–06) y Computer Use (Clases 07–08) son *exactamente la misma cosa* — agentes construidos con el tool loop del Módulo 03. La diferencia es solo qué tools les das (filesystem+shell vs mouse+keyboard+screenshot). Una vez que ves esto, construir tu propio agente especializado es decidir: *¿qué entorno controla? → ¿qué tools necesita? → schema → executor → loop*. Todo lo demás del módulo son optimizaciones sobre esa base.
+
 ---
 
 ## Takeaways Centrales del Curso
